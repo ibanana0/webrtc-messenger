@@ -21,8 +21,12 @@ def create_app(config_name=None):
     
     # inisialisasi dengan extension
     db.init_app(app=app)
-    CORS(app=app, origins=app.config['CORS_ORIGIN'], supports_credentials=True)
-    socketio.init_app(app=app,cors_allowed_origins=app.config['CORS_ORIGIN'], async_mode='eventlet')
+    CORS(app=app, origins=app.config['CORS_ORIGINS'], supports_credentials=True)
+    socketio.init_app(app=app,cors_allowed_origins=app.config['CORS_ORIGINS'], async_mode='eventlet')
+    
+    from app.routes.auth import auth_bp
+    
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
     
     # membuat database
     with app.app_context():

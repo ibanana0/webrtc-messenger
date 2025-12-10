@@ -12,11 +12,11 @@ class User(BaseModel):
     public_key = db.Column(db.Text, nullable=True)  # untuk e2e encryption
     
     # Fungsi helper
-    def set_password(self, str, password: str) -> None:
-        salt = bcrypt.gensalt
+    def set_password(self, password: str) -> None:
+        salt = bcrypt.gensalt()
         self.password_hash = bcrypt.hashpw(
-            password=password.encode(encoding="utf-8"),
-            salt=salt
+            password.encode(encoding="utf-8"),
+            salt
         ).decode("utf-8")
         
     def check_password(self, password: str) -> bool:
