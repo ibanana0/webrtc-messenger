@@ -20,7 +20,7 @@ services:
   backend:
     build: .
     ports:
-      - "808:5000"
+      - "8080:5000"
     environment:
       - FLASK_ENV=development
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_messenger
