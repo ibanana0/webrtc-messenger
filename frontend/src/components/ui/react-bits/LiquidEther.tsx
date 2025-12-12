@@ -111,7 +111,7 @@ void main() {
 }
 `;
 
-export default function ColorBends({
+export default function LiquidEther({
   className,
   style,
   rotation = 45,

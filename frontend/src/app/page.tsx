@@ -21,7 +21,7 @@ export default function Home() {
              <DecryptedText
                             text="To get started, edit the page.tsx file."
                             speed={80}
-                            maxIterations={1}
+                            maxIterations={10}
                             sequential={true}
                             animateOn="view"
                             revealDirection="start"
