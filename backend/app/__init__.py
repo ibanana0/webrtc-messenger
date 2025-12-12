@@ -22,7 +22,7 @@ def create_app(config_name=None):
     # inisialisasi dengan extension
     db.init_app(app=app)
     CORS(app=app, origins=app.config['CORS_ORIGINS'], supports_credentials=True)
-    socketio.init_app(app=app,cors_allowed_origins=app.config['CORS_ORIGINS'], async_mode='eventlet')
+    socketio.init_app(app=app,cors_allowed_origins=app.config['CORS_ORIGINS'], async_mode='threading')
     
     from app.routes.auth import auth_bp
     

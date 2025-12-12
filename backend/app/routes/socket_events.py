@@ -14,17 +14,20 @@ def handle_disconnect():
     if user:
         emit('user_left', {'username': user['username']}, broadcast=True)
     print(f'Client Disconnected: {request.sid}')
+    online_users = [u['username'] for u in connected_user.values()]
+    emit('online_users', {'users': online_users}, broadcast=True)
+    print(f'Client Disconnected: {request.sid}')
 
 @socketio.on('join')
 def handle_join(data):
     username = data.get('username')
     if username:
-        connected_user[request.sid] = {'username', username}
+        connected_user[request.sid] = {'username': username}
         join_room('main')
         emit('user_joined', {'username' : username}, room='main')
         
         online_users = [u['username'] for u in connected_user.values()]
-        emit('online_users', {'username': online_users}, room='main')
+        emit('online_users', {'users': online_users}, room='main')
 
 @socketio.on('leave')
 def handle_leave(data):
