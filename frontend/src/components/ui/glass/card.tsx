@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Card as BaseCard, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { GlassCustomization } from "@/lib/glass-utils"
+import { getGlassStyles, type GlassCustomization } from "@/lib/glass-utils"
 import { hoverEffects, type HoverEffect } from "@/lib/hover-effects"
 
 export interface CardProps extends React.ComponentProps<typeof BaseCard> {
@@ -19,29 +19,13 @@ export interface CardProps extends React.ComponentProps<typeof BaseCard> {
  * 
  * @example
  * ```tsx
- * // Standard glass variant (default)
- * <Card variant="glass">
- *   Content
- * </Card>
- * 
- * // Frosted glass variant - enhanced blur and opacity
- * <Card variant="frosted">
- *   Content
- * </Card>
- * 
- * // Fluted glass variant - vertical ridges texture
- * <Card variant="fluted">
- *   Content
- * </Card>
- * 
- * // Crystal glass variant - clear with highlights and glow
- * <Card variant="crystal">
+ * // Standard glass card
+ * <Card>
  *   Content
  * </Card>
  * 
  * // Custom glass properties
  * <Card 
- *   variant="glass"
  *   glass={{
  *     color: "rgba(139, 92, 246, 0.2)",
  *     blur: 30,
@@ -58,19 +42,20 @@ export interface CardProps extends React.ComponentProps<typeof BaseCard> {
  * ```
  */
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant = "glass", gradient = false, animated = false, hover = "none", glass, children, ...props }, ref) => {
+  ({ className, gradient = false, animated = false, hover = "none", glass, style, children, ...props }, ref) => {
+    const glassStyles = getGlassStyles(glass)
+
     return (
       <BaseCard
         ref={ref}
-        variant={variant}
-        glass={glass}
         className={cn(
-          "relative overflow-hidden",
+          "relative overflow-hidden backdrop-blur-xl border border-white/20 bg-white/10",
           gradient && "bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-pink-500/10",
           animated && "transition-all duration-300 hover:scale-[1.02] hover:shadow-[var(--glass-shadow-lg)]",
           hoverEffects({ hover }),
           className
         )}
+        style={{ ...glassStyles, ...style }}
         {...props}
       >
         {children}
@@ -87,4 +72,3 @@ export {
   CardHeader,
   CardTitle,
 }
-

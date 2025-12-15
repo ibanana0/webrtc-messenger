@@ -53,20 +53,6 @@ export default function RegisterPage() {
                 <div className="fixed inset-0 w-screen h-screen">
                     <LiquidEther
                         colors={['#5227FF', '#FF9FFC', '#B19EEF']}
-                        mouseForce={20}
-                        cursorSize={100}
-                        isViscous={false}
-                        viscous={30}
-                        iterationsViscous={32}
-                        iterationsPoisson={32}
-                        resolution={0.5}
-                        isBounce={false}
-                        autoDemo={true}
-                        autoSpeed={0.5}
-                        autoIntensity={2.2}
-                        takeoverDuration={0.25}
-                        autoResumeDelay={3000}
-                        autoRampDuration={0.6}
                     />
                 </div>
                 <div className="relative z-10 flex min-h-screen items-center justify-center ">
@@ -109,7 +95,7 @@ export default function RegisterPage() {
                                 />
                                 {error && <p className="text-red-500 text-sm">{error}</p>}
 
-                                <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
+                                <Button type="submit" className="w-full cursor-pointer" disabled={loading} variant={'ghost'}>
                                     {loading ? 'Loading...' : 'Sign Up'}
                                 </Button>
                             </form>

@@ -44,8 +44,6 @@ export default function ChatPage() {
                 <div className="fixed inset-0 w-screen h-screen">
                     <LiquidEther
                         colors={['#5227FF', '#FF9FFC', '#B19EEF']}
-                        autoDemo={true}
-                        autoSpeed={0.3}
                     />
                 </div>
                 {/* Chat UI */}
@@ -66,16 +64,15 @@ export default function ChatPage() {
                     {/* Messages */}
                     <Card className="flex-1 overflow-y-auto p-4 backdrop-blur-xl mb-4">
                         {messages.map((msg, i) => (
-                            <div 
-                                key={i} 
+                            <div
+                                key={i}
                                 className={`mb-2 ${msg.username === user.username ? 'text-right' : ''}`}
                             >
                                 <span className="text-xs text-gray-400">{msg.username}</span>
-                                <p className={`inline-block px-3 py-1 rounded-lg ${
-                                    msg.username === user.username 
-                                        ? 'bg-blue-600' 
+                                <p className={`inline-block px-3 py-1 rounded-lg ${msg.username === user.username
+                                        ? 'bg-blue-600'
                                         : 'bg-gray-700'
-                                }`}>
+                                    }`}>
                                     {msg.message}
                                 </p>
                             </div>
@@ -90,7 +87,7 @@ export default function ChatPage() {
                             placeholder="Type a message..."
                             className="flex-1"
                         />
-                        <Button type="submit">Send</Button>
+                        <Button type="submit" variant={'outline'}>Send</Button>
                     </form>
                 </div>
             </div>

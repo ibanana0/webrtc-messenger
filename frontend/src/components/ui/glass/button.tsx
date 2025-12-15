@@ -3,11 +3,11 @@
 import * as React from "react"
 import { Button as BaseButton } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { GlassCustomization } from "@/lib/glass-utils"
+import { getGlassStyles, type GlassCustomization } from "@/lib/glass-utils"
 import { hoverEffects, type HoverEffect } from "@/lib/hover-effects"
 
 export interface ButtonProps
-  extends Omit<React.ComponentProps<typeof BaseButton>, "glass"> {
+  extends React.ComponentProps<typeof BaseButton> {
   effect?: HoverEffect
   glass?: GlassCustomization
 }
@@ -32,20 +32,22 @@ export interface ButtonProps
 export const Button = React.forwardRef<
   HTMLButtonElement,
   ButtonProps
->(({ className, effect = "lift", variant = "glass", glass, ...props }, ref) => {
+>(({ className, effect = "lift", variant = "default", glass, style, ...props }, ref) => {
+  const glassStyles = getGlassStyles(glass)
+
   return (
     <BaseButton
       ref={ref}
       variant={variant}
-      glass={glass}
       className={cn(
         "relative overflow-hidden",
+        glass && "backdrop-blur-xl border border-white/20 bg-white/10",
         hoverEffects({ hover: effect }),
         className
       )}
+      style={{ ...glassStyles, ...style }}
       {...props}
     />
   )
 })
 Button.displayName = "Button"
-

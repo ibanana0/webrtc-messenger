@@ -15,7 +15,7 @@ import { PageTransition } from "@/components/ui/page-transition"
 
 export default function LoginPage() {
     const router = useRouter()
-    const login = useAuthStore ((state) => state.login)
+    const login = useAuthStore((state) => state.login)
 
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -46,26 +46,12 @@ export default function LoginPage() {
         setLoading(false)
     }
 
-    return(
+    return (
         <PageTransition className="">
             <div className="relative min-h-screen overflow-hidden">
                 <div className="fixed inset-0 w-screen h-screen">
                     <LiquidEther
-                        colors={[ '#5227FF', '#FF9FFC', '#B19EEF' ]}
-                        mouseForce={20}
-                        cursorSize={100}
-                        isViscous={false}
-                        viscous={30}
-                        iterationsViscous={32}
-                        iterationsPoisson={32}
-                        resolution={0.5}
-                        isBounce={false}
-                        autoDemo={true}
-                        autoSpeed={0.5}
-                        autoIntensity={2.2}
-                        takeoverDuration={0.25}
-                        autoResumeDelay={3000}
-                        autoRampDuration={0.6}
+                        colors={['#5227FF', '#FF9FFC', '#B19EEF']}
                     />
                 </div>
                 <div className="relative z-10 flex min-h-screen items-center justify-center">
@@ -88,19 +74,19 @@ export default function LoginPage() {
                         <CardContent>
                             <form className=' flex flex-col justify-between h-fit space-y-4' onSubmit={handleSubmit}>
                                 <Input placeholder="Username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                required
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    required
                                 />
                                 <Input placeholder="Password"
-                                type='password'
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
+                                    type='password'
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
                                 />
                                 {error && <p className="text-red-500 text-sm">{error}</p>}
 
-                                <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
+                                <Button type="submit" className="w-full cursor-pointer" disabled={loading} variant={'ghost'}>
                                     {loading ? 'Loading...' : 'Sign In'}
                                 </Button>
                             </form>
@@ -111,7 +97,7 @@ export default function LoginPage() {
                                 </Link>
                             </p>
                         </CardContent>
-                    </Card>            
+                    </Card>
                 </div>
             </div>
         </PageTransition>
