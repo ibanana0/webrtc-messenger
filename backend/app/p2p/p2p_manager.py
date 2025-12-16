@@ -35,13 +35,15 @@ class P2PManager:
             return
         
         self.node = P2PNode(listen_port=port)
-    
-        def run_trio(self, socketio):
+        self._socketio = socketio
+
+        def run_trio():
             trio.run(self._run_node, socketio)
-            self._thread = threading.Thread(target=run_trio, daemon=True)
-            self._thread.start()
-            
-            logger.info(f"P2P Manager started on port {port}")
+        
+        self._thread = threading.Thread(target=run_trio, daemon=True)
+        self._thread.start()
+        
+        logger.info(f"P2P Manager started on port {port}")
         
     async def _run_node(self, socketio):
         self.gossip_handler = GossipHandler(self.node, socketio)

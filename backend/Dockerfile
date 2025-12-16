@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cargo \
     && rm -rf /var/lib/apt/lists/*
 
-# install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# install Python dependencies with constraints to block conflicting packages
+COPY requirements.txt constraints.txt ./
+RUN pip install --no-cache-dir -c constraints.txt libp2p==0.4.0 && \
+    pip install --no-cache-dir -c constraints.txt -r requirements.txt
 
 # copy src
 COPY . .

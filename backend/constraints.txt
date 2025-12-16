@@ -1,0 +1,3 @@
+# Constraints to fix libp2p dependency conflicts
+# py-multihash conflicts with pymultihash (which libp2p needs)
+py-multihash < 0
