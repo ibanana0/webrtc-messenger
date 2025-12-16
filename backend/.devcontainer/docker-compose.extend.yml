@@ -1,0 +1,21 @@
+services:
+  backend:
+    # Override command to keep container running for development
+    command: sleep infinity
+
+    # Mount workspace
+    volumes:
+      - ..:/workspace:cached
+
+    # Enable ptrace for debugging
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+
+    # Environment for dev container
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_messenger
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - FLASK_ENV=development

@@ -33,4 +33,8 @@ def create_app(config_name=None):
     with app.app_context():
         db.create_all()
         
+    p2p_port = int(os.environ.get('P2P_PORT', 8000))
+    from app.p2p.p2p_manager import p2p_manager
+    p2p_manager.start(port=p2p_port, socketio=socketio)
+    
     return app

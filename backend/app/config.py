@@ -9,6 +9,9 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/p2p_messenger')
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')   # displit agar membuat List dari domain yang dapat mengakses API
     
+    P2P_PORT = int(os.environ.get('P2P_PORT', 8000))
+    P2P_BOOTSTRAP_PEERS = os.environ.get('P2P_BOOTSTRAP_PEERS', '').split(',')
+
 class DevelopmentConfig(Config):
     DEBUG = True
 

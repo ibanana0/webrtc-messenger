@@ -1,6 +1,7 @@
 from flask import request
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
+from app.p2p.p2p_manager import p2p_manager
 
 connected_user = {}
 
@@ -41,6 +42,7 @@ def handle_leave(data):
 def handle_message(data):
     username = data.get('username')
     message = data.get('message')
+    timestamp = data.get('timestamp')
     
     if username and message:
         emit('receive_message', {
@@ -48,3 +50,9 @@ def handle_message(data):
             'message': message,
             'timestamp': data.get('timestamp')
         }, room='main')
+    
+    p2p_manager.send_message(
+            sender=username,
+            content=message,
+            timestamp=timestamp
+        )
