@@ -111,3 +111,9 @@ def handle_get_p2p_info():
         'peer_count': peer_count,
         'known_peers': known_peers
     })
+
+def on_peer_connected(peer_id: str):
+    socketio.emit('peer_connected', {'peer_id': peer_id}, room='main')
+
+def on_peer_disconnected(peer_id: str):
+    socketio.emit('peer_disconnected', {'peer_id': peer_id}, room='main')

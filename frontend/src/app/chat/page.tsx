@@ -9,6 +9,8 @@ import { Card } from '@/components/ui/glass/card'
 import { PageTransition } from '@/components/ui/page-transition'
 import LiquidEther from '@/components/ui/react-bits/LiquidEther'
 import { PeerConnection } from '@/components/ui/PeerConnection'
+import { P2PStatusBadge } from '@/components/ui/P2PStatusBadge'
+import { P2PEventLog } from '@/components/ui/P2PEventLog'
 
 export default function ChatPage() {
     const router = useRouter()
@@ -19,7 +21,6 @@ export default function ChatPage() {
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [showP2PPanel, setShowP2PPanel] = useState(false)
 
-    // Redirect if not logged in - wait for hydration first
     useEffect(() => {
         if (hasHydrated && !user) {
             router.push('/login')
@@ -35,10 +36,11 @@ export default function ChatPage() {
         knownPeers,
         peerCount,
         connectToPeer,
-        refreshP2PInfo
+        refreshP2PInfo,
+        p2pEvents,
+        clearP2PEvents
     } = useWebsocket(user?.username || '')
 
-    // Auto scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
@@ -57,13 +59,10 @@ export default function ChatPage() {
     return (
         <PageTransition>
             <div className="relative min-h-screen overflow-hidden">
-                {/* Background */}
                 <div className="fixed inset-0 w-screen h-screen">
                     <LiquidEther colors={['#5227FF', '#FF9FFC', '#B19EEF']} />
                 </div>
-                {/* Chat UI */}
                 <div className="relative z-10 flex flex-col h-screen p-4">
-                    {/* Header */}
                     <div className="flex justify-between items-center mb-4">
                         <div>
                             <h1 className="text-xl font-bold">Chat</h1>
@@ -74,21 +73,17 @@ export default function ChatPage() {
                             </p>
                         </div>
                         <div className="flex gap-2">
-                            <Button
-                                variant="ghost"
+                            <P2PStatusBadge 
+                                isConnected={isConnected}
+                                peerCount={peerCount}
                                 onClick={() => setShowP2PPanel(!showP2PPanel)}
-                                className={showP2PPanel ? 'bg-blue-600/20' : ''}
-                            >
-                                🔗 P2P
-                            </Button>
+                            />
                             <Button variant="ghost" onClick={handleLogout}>
                                 Logout
                             </Button>
                         </div>
                     </div>
-                    {/* Main Content */}
                     <div className="flex flex-1 gap-4 overflow-hidden">
-                        {/* Messages Panel */}
                         <Card className={`flex-1 overflow-y-auto p-4 backdrop-blur-xl ${showP2PPanel ? 'lg:w-2/3' : 'w-full'}`}>
                             {messages.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-gray-400">
@@ -111,7 +106,7 @@ export default function ChatPage() {
                                         <p className={`inline-block px-3 py-2 rounded-lg max-w-[80%] ${msg.username === user.username
                                                 ? 'bg-blue-600'
                                                 : msg.from_peer
-                                                    ? 'bg-purple-700/80'  // P2P messages styled differently
+                                                    ? 'bg-purple-700/80'  
                                                     : 'bg-gray-700'
                                             }`}>
                                             {msg.message}
@@ -124,9 +119,8 @@ export default function ChatPage() {
                             )}
                             <div ref={messagesEndRef} />
                         </Card>
-                        {/* P2P Panel - Shown when toggled */}
                         {showP2PPanel && (
-                            <div className="w-80 hidden lg:block">
+                            <div className="w-80 hidden lg:block space-y-4">
                                 <PeerConnection
                                     nodeInfo={nodeInfo}
                                     knownPeers={knownPeers}
@@ -134,10 +128,14 @@ export default function ChatPage() {
                                     onConnectPeer={connectToPeer}
                                     onRefresh={refreshP2PInfo}
                                 />
+                                {/* BARU: Event Log */}
+                                <P2PEventLog 
+                                    events={p2pEvents}
+                                    onClear={clearP2PEvents}
+                                />
                             </div>
                         )}
-                    </div>
-                    {/* Input */}
+                    </div>                    
                     <form onSubmit={handleSend} className="flex gap-2 mt-4">
                         <Input
                             value={inputMessage}
@@ -149,7 +147,6 @@ export default function ChatPage() {
                             Send
                         </Button>
                     </form>
-                    {/* Mobile P2P Panel */}
                     {showP2PPanel && (
                         <div className="lg:hidden mt-4">
                             <PeerConnection

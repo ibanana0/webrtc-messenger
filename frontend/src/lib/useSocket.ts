@@ -28,6 +28,20 @@ interface PeerConnectionStatus {
     error?: string
 }
 
+interface P2PEvent {
+    type: 'peer_connected' | 'peer_disconnected' | 'message_from_peer'
+    peer_id: string
+    data?: any
+    timestamp: string
+}
+
+interface ConnectionHistoryItem {
+    address: string
+    status: 'success' | 'failed' | 'pending'
+    timestamp: Date
+    error?: string
+}
+
 export function useWebsocket(username: string) {
     const socketRef = useRef<Socket | null>(null)
     const [isConnected, setIsConnected] = useState(false)
@@ -38,6 +52,8 @@ export function useWebsocket(username: string) {
     const [nodeInfo, setNodeInfo] = useState<NodeInfo | null>(null)
     const [knownPeers, setKnownPeers] = useState<PeerInfo[]>([])
     const [peerCount, setPeerCount] = useState(0)
+    const [p2pEvents, setP2pEvents] = useState<P2PEvent[]>([])
+    const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryItem[]>([])
 
     useEffect(() => {
         // Dynamic backend URL - can be overridden via localStorage
@@ -100,6 +116,27 @@ export function useWebsocket(username: string) {
             }
         })
 
+        socketRef.current.on('peer_connected', (data: { peer_id: string }) => {
+            console.log('New peer connected:', data.peer_id)
+            setP2pEvents(prev => [...prev, {
+                type: 'peer_connected',
+                peer_id: data.peer_id,
+                timestamp: new Date().toISOString()
+            }])
+            socketRef.current?.emit('get_p2p_info')
+        })
+
+        socketRef.current.on('peer_disconnected', (data: { peer_id: string }) => {
+            console.log('Peer disconnected:', data.peer_id)
+            setP2pEvents(prev => [...prev, {
+                type: 'peer_disconnected',
+                peer_id: data.peer_id,
+                timestamp: new Date().toISOString()
+            }])
+            // Auto refresh peer list
+            socketRef.current?.emit('get_p2p_info')
+        })
+
         socketRef.current.on('p2p_info', (data: {
             node_info: NodeInfo
             peer_count?: number
@@ -117,6 +154,15 @@ export function useWebsocket(username: string) {
 
         socketRef.current.on('peer_connection_status', (data: PeerConnectionStatus) => {
             console.log('Peer connection status:', data)
+            
+            // Simpan ke connection history
+            setConnectionHistory(prev => [...prev, {
+                address: data.address,
+                status: data.success ? 'success' : 'failed',
+                timestamp: new Date(),
+                error: data.error
+            }])
+            
             if (data.success) {
                 // Request updated peer list
                 socketRef.current?.emit('get_p2p_info')
@@ -148,6 +194,15 @@ export function useWebsocket(username: string) {
     const refreshP2PInfo = useCallback(() => {
         socketRef.current?.emit('get_p2p_info')
     }, [])
+
+    const clearP2PEvents = useCallback(() => {
+        setP2pEvents([])
+    }, [])
+
+    const clearConnectionHistory = useCallback(() => {
+        setConnectionHistory([])
+    }, [])
+
     return {
         isConnected,
 
@@ -161,5 +216,10 @@ export function useWebsocket(username: string) {
 
         connectToPeer,
         refreshP2PInfo,
+
+        p2pEvents,
+        connectionHistory,
+        clearP2PEvents,
+        clearConnectionHistory,
     }
 }

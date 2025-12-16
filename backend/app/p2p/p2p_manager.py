@@ -46,9 +46,17 @@ class P2PManager:
         logger.info(f"P2P Manager started on port {port}")
         
     async def _run_node(self, socketio):
+        from app.routes.socket_events import on_peer_connected, on_peer_disconnected
+        
         self.gossip_handler = GossipHandler(self.node, socketio)
         self._trio_token = trio.lowlevel.current_trio_token()
         self._send_channel, self._receive_channel = trio.open_memory_channel(100)
+        
+        # Register peer callbacks to notify frontend
+        self.node.set_peer_callbacks(
+            on_connect=on_peer_connected,
+            on_disconnect=on_peer_disconnected
+        )
         
         async with trio.open_nursery() as nursery:
             nursery.start_soon(self.node.start)

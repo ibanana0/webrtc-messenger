@@ -1,0 +1,40 @@
+version: '3.8'
+
+# Docker Compose untuk Node 2 (Server Kedua)
+# Jalankan dengan: docker-compose -f docker-compose.node2.yml up --build
+
+services:
+  db2:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: p2p_messenger_node2
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_node2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend2:
+    build: .
+    ports:
+      - "8081:5000"    # Flask/SocketIO port berbeda
+      - "8001:8001"    # P2P port berbeda (expose untuk koneksi antar node)
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db2:5432/p2p_messenger_node2
+      - SECRET_KEY=dev-secret-key-node2
+      - JWT_SECRET_KEY=dev-jwt-secret-key-node2
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+      - P2P_PORT=8001
+    depends_on:
+      db2:
+        condition: service_healthy
+
+volumes:
+  postgres_data_node2:

@@ -17,6 +17,8 @@ class P2PNode:
         self.listen_port = listen_port
         self.host = None
         self.on_message_callback: Optional[Callable] = None
+        self.on_peer_connected_callback: Optional[Callable] = None
+        self.on_peer_disconnected_callback: Optional[Callable] = None
         self._running = False
         self._connected_peers = set()
     
@@ -71,9 +73,15 @@ class P2PNode:
             peer_info = info_from_p2p_addr(maddr)
             
             await self.host.connect(peer_info)
-            self._connected_peers.add(peer_info.peer_id.pretty())
+            peer_id_str = peer_info.peer_id.pretty()
+            self._connected_peers.add(peer_id_str)
             
-            logger.info(f"Connected to peer: {peer_info.peer_id.pretty()}")
+            logger.info(f"Connected to peer: {peer_id_str}")
+            
+            # Notify callback about new peer connection
+            if self.on_peer_connected_callback:
+                self.on_peer_connected_callback(peer_id_str)
+            
             return True
         
         except Exception as e:
@@ -96,12 +104,23 @@ class P2PNode:
             return True
         
         except Exception as e:
-            logger.error(f"Failed to send message: {e}")
+            logger.error(f"Failed to send message to {peer_id}: {e}")
+            # Peer is likely disconnected, remove from connected peers
+            self.remove_peer(peer_id)
             return False
     
     async def broadcast_message(self, message: dict):
-        for peer_id in self._connected_peers:
-            await self.send_message(peer_id, message)
+        # Use a copy of the set to avoid modification during iteration
+        peers_to_send = list(self._connected_peers.copy())
+        failed_peers = []
+        
+        for peer_id in peers_to_send:
+            success = await self.send_message(peer_id, message)
+            if not success:
+                failed_peers.append(peer_id)
+        
+        if failed_peers:
+            logger.info(f"Failed to send to {len(failed_peers)} peers: {failed_peers}")
     
     def get_peer_id(self) -> str:
         if self.host:
@@ -114,13 +133,94 @@ class P2PNode:
         return []
     
     def get_full_addresses(self) -> list:
-        if self.host:
-            peer_id = self.get_peer_id()
-            return [f"{addr}/p2p/{peer_id}" for addr in self.host.get_addrs()]
-        return []
+        """
+        Get full multiaddr addresses that can be shared for peer connection.
+        Filters out invalid addresses like 0.0.0.0 and prevents duplicate /p2p/.
+        Also detects real container IP for Docker environments.
+        """
+        if not self.host:
+            return []
+        
+        import socket
+        
+        peer_id = self.get_peer_id()
+        full_addresses = []
+        
+        for addr in self.host.get_addrs():
+            addr_str = str(addr)
+            
+            # Skip 0.0.0.0 - it's not a valid connection address
+            if '/ip4/0.0.0.0/' in addr_str:
+                continue
+            
+            # Skip localhost for Docker - containers can't reach each other via 127.0.0.1
+            if '/ip4/127.0.0.1/' in addr_str:
+                continue
+            
+            # Skip if already has /p2p/ to prevent duplication
+            if '/p2p/' in addr_str:
+                full_addresses.append(addr_str)
+            else:
+                full_addresses.append(f"{addr_str}/p2p/{peer_id}")
+        
+        # If no valid addresses found, try to detect real IP
+        if not full_addresses and peer_id:
+            try:
+                # Get the real IP address of this container/machine
+                hostname = socket.gethostname()
+                real_ip = socket.gethostbyname(hostname)
+                
+                # If we get a valid IP (not localhost)
+                if real_ip and real_ip != '127.0.0.1':
+                    full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
+                else:
+                    # Fallback: try to get IP from socket connection
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    try:
+                        # Connect to a public IP (doesn't actually send data)
+                        s.connect(('8.8.8.8', 80))
+                        real_ip = s.getsockname()[0]
+                        full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
+                    except Exception:
+                        # Ultimate fallback to localhost
+                        full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
+                    finally:
+                        s.close()
+            except Exception as e:
+                logger.warning(f"Could not detect real IP: {e}")
+                full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
+        
+        return full_addresses
     
     def set_message_callback(self, callback: Callable):
         self.on_message_callback = callback
+    
+    def set_peer_callbacks(self, on_connect: Callable = None, on_disconnect: Callable = None):
+        """
+        Set callbacks for peer connection events.
+        
+        Args:
+            on_connect: Callback called when a peer connects (peer_id: str)
+            on_disconnect: Callback called when a peer disconnects (peer_id: str)
+        """
+        if on_connect:
+            self.on_peer_connected_callback = on_connect
+        if on_disconnect:
+            self.on_peer_disconnected_callback = on_disconnect
+    
+    def remove_peer(self, peer_id: str):
+        """
+        Remove a peer from connected peers set and trigger disconnect callback.
+        
+        Args:
+            peer_id: The peer ID to remove
+        """
+        if peer_id in self._connected_peers:
+            self._connected_peers.remove(peer_id)
+            logger.info(f"Peer disconnected: {peer_id}")
+            
+            if self.on_peer_disconnected_callback:
+                self.on_peer_disconnected_callback(peer_id)
     
     async def stop(self):
         self._running = False
