@@ -21,12 +21,14 @@ services:
     build: .
     ports:
       - "8080:5000"
+      - "8000:8000"    # P2P port exposed untuk koneksi antar node
     environment:
       - FLASK_ENV=development
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/p2p_messenger
       - SECRET_KEY=dev-secret-key-change-in-production
       - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
       - CORS_ORIGINS=http://localhost:3000
+      - P2P_PORT=8000
     depends_on:
       db:
         condition: service_healthy
