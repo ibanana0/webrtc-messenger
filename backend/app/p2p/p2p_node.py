@@ -1,5 +1,5 @@
 import trio
-from libp2p import new_host, create_new_key_pair, TProtocol  # Lebih sederhana!
+from libp2p import new_host, create_new_key_pair, TProtocol
 from libp2p.peer.peerinfo import info_from_p2p_addr
 from libp2p.network.stream.net_stream import INetStream
 from multiaddr import Multiaddr
@@ -24,7 +24,6 @@ class P2PNode:
     
     async def start(self):
         try:
-            # membuat key pair yang unik untuk setiap node, digunakan untuk enkripsi
             key_pair = create_new_key_pair()
             listen_addr = Multiaddr(f'/ip4/0.0.0.0/tcp/{self.listen_port}')
             
@@ -43,7 +42,6 @@ class P2PNode:
                     full_addr = f'{addr}/p2p/{peer_id}'
                     logger.info(f'Full address: {full_addr}')
                 
-                # dijalankan terus
                 while self._running:
                     await trio.sleep(1)
         except Exception as e:
@@ -58,6 +56,13 @@ class P2PNode:
                 message = json.loads(data.decode('utf-8'))
                 peer_id = stream.muxed_conn.peer_id.pretty()
                 logger.info(f'Received message from {peer_id}: {message}')
+
+                if peer_id not in self._connected_peers:
+                    self._connected_peers.add(peer_id)
+                    logger.info(f'📡 Added inbound peer to connected peers: {peer_id}')
+                    
+                    if self.on_peer_connected_callback:
+                        self.on_peer_connected_callback(peer_id)
 
                 if self.on_message_callback:
                     self.on_message_callback(message, peer_id)
@@ -78,19 +83,33 @@ class P2PNode:
             
             logger.info(f"Connected to peer: {peer_id_str}")
             
-            # Notify callback about new peer connection
             if self.on_peer_connected_callback:
                 self.on_peer_connected_callback(peer_id_str)
+            
+            await self._send_handshake(peer_id_str)
             
             return True
         
         except Exception as e:
             logger.error(f"Failed to connect to peer: {e}")
             return False
+    
+    async def _send_handshake(self, peer_id: str):
+        """Send a handshake message after connecting to establish bidirectional awareness"""
+        try:
+            handshake = {
+                'id': f'handshake_{self.get_peer_id()}_{peer_id}',
+                'type': 'peer_announce',
+                'addresses': self.get_full_addresses(),
+                'from_peer_id': self.get_peer_id()
+            }
+            await self.send_message(peer_id, handshake)
+            logger.info(f"🤝 Handshake sent to {peer_id}")
+        except Exception as e:
+            logger.error(f"Failed to send handshake: {e}")
    
     async def send_message(self, peer_id: str, message: dict) -> bool:
         try:
-            # Cari peer info dari connected peers
             from libp2p.peer.id import ID
             target_peer_id = ID.from_base58(peer_id)
             
@@ -105,12 +124,10 @@ class P2PNode:
         
         except Exception as e:
             logger.error(f"Failed to send message to {peer_id}: {e}")
-            # Peer is likely disconnected, remove from connected peers
             self.remove_peer(peer_id)
             return False
     
     async def broadcast_message(self, message: dict):
-        # Use a copy of the set to avoid modification during iteration
         peers_to_send = list(self._connected_peers.copy())
         failed_peers = []
         
@@ -149,40 +166,31 @@ class P2PNode:
         for addr in self.host.get_addrs():
             addr_str = str(addr)
             
-            # Skip 0.0.0.0 - it's not a valid connection address
             if '/ip4/0.0.0.0/' in addr_str:
                 continue
             
-            # Skip localhost for Docker - containers can't reach each other via 127.0.0.1
             if '/ip4/127.0.0.1/' in addr_str:
                 continue
             
-            # Skip if already has /p2p/ to prevent duplication
             if '/p2p/' in addr_str:
                 full_addresses.append(addr_str)
             else:
                 full_addresses.append(f"{addr_str}/p2p/{peer_id}")
         
-        # If no valid addresses found, try to detect real IP
         if not full_addresses and peer_id:
             try:
-                # Get the real IP address of this container/machine
                 hostname = socket.gethostname()
                 real_ip = socket.gethostbyname(hostname)
                 
-                # If we get a valid IP (not localhost)
                 if real_ip and real_ip != '127.0.0.1':
                     full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
                 else:
-                    # Fallback: try to get IP from socket connection
                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     try:
-                        # Connect to a public IP (doesn't actually send data)
                         s.connect(('8.8.8.8', 80))
                         real_ip = s.getsockname()[0]
                         full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
                     except Exception:
-                        # Ultimate fallback to localhost
                         full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
                     finally:
                         s.close()

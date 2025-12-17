@@ -1,158 +1,113 @@
+/**
+ * E2E Encryption menggunakan X25519 (Curve25519) + AES-256-GCM
+ * 
+ * Flow enkripsi:
+ * 1. Generate ephemeral X25519 key pair
+ * 2. Lakukan X25519 key exchange: ephemeralPrivate × recipientPublic = sharedSecret
+ * 3. Derive AES key dari sharedSecret menggunakan SHA-256
+ * 4. Encrypt message dengan AES-256-GCM
+ * 5. Kirim: ephemeralPublicKey + nonce + ciphertext
+ * 
+ * Flow dekripsi:
+ * 1. Extract ephemeral public key dari payload
+ * 2. Lakukan X25519 key exchange: recipientPrivate × ephemeralPublic = sharedSecret
+ * 3. Derive AES key dari sharedSecret
+ * 4. Decrypt dengan AES-256-GCM
+ */
+
+import nacl from 'tweetnacl'
+import { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } from 'tweetnacl-util'
+
+// Encryption version untuk backward compatibility di masa depan
+const ENCRYPTION_VERSION = 2
+
 export interface EncryptedPayload {
-    encryptedKey: string
-    encryptedMessage: string
-    iv: string
+    /** Ephemeral public key (base64) - digunakan untuk key exchange */
+    ephemeralPublicKey: string
+    /** Nonce/IV untuk AES-GCM (base64) */
+    nonce: string
+    /** Ciphertext terenkripsi (base64) */
+    ciphertext: string
+    /** Version enkripsi */
     version: number
 }
 
 export interface StorableKeyPair {
+    /** Public key dalam format base64 */
     publicKey: string
+    /** Private key dalam format base64 */
     privateKey: string
 }
 
-const ENCRYPTION_VERSION = 1
-const RSA_CONFIG = {
-    name: 'RSA-OAEP',
-    modulusLength: 2048,
-    publicExponent: new Uint8Array([1, 0, 1]),
-    hash: 'SHA-256'
-}
-
-const AES_CONFIG = {
-    name: 'AES-GCM',
-    length: 256
-}
-
-export async function generateKeyPair(): Promise<CryptoKeyPair> {
+/**
+ * Generate X25519 key pair baru untuk enkripsi
+ * Menggunakan nacl.box yang berbasis Curve25519
+ */
+export function generateKeyPair(): StorableKeyPair {
     try {
-        const keyPair = await window.crypto.subtle.generateKey(
-            RSA_CONFIG,
-            true,
-            ['encrypt', 'decrypt']
-        )
+        // nacl.box.keyPair() generates X25519 key pair
+        const keyPair = nacl.box.keyPair()
 
-        return keyPair
+        return {
+            publicKey: encodeBase64(keyPair.publicKey),
+            privateKey: encodeBase64(keyPair.secretKey)
+        }
     } catch (error) {
-        console.error('Failed to generate key pair:', error)
+        console.error('Failed to generate X25519 key pair:', error)
         throw new Error('Failed to generate encryption keys')
     }
 }
 
-export async function exportPublicKey(publicKey: CryptoKey): Promise<string> {
-    try {
-        const exported = await window.crypto.subtle.exportKey('spki', publicKey)
-        const base64 = arrayBufferToBase64(exported)
-
-        const pemBody = base64.match(/.{1,64}/g)?.join('\n') || base64
-
-        return `-----BEGIN PUBLIC KEY-----\n${pemBody}\n-----END PUBLIC KEY-----`
-    } catch (error) {
-        console.error('Failed to export public key:', error)
-        throw new Error('Failed to export public key')
-    }
+/**
+ * Alias untuk generateKeyPair (compatibility dengan kode lama)
+ */
+export async function generateAndExportKeyPair(): Promise<StorableKeyPair> {
+    return generateKeyPair()
 }
 
-export async function exportPrivateKey(privateKey: CryptoKey): Promise<string> {
-    try {
-        const exported = await window.crypto.subtle.exportKey('pkcs8', privateKey)
-        const base64 = arrayBufferToBase64(exported)
-
-        const pemBody = base64.match(/.{1,64}/g)?.join('\n') || base64
-
-        return `-----BEGIN PRIVATE KEY-----\n${pemBody}\n-----END PRIVATE KEY-----`
-    } catch (error) {
-        console.error('Failed to export private key:', error)
-        throw new Error('Failed to export private key')
-    }
-}
-
-export async function importPublicKey(pemPublicKey: string): Promise<CryptoKey> {
-    try {
-        // Remove PEM headers and whitespace
-        const pemContents = pemPublicKey
-            .replace('-----BEGIN PUBLIC KEY-----', '')
-            .replace('-----END PUBLIC KEY-----', '')
-            .replace(/\s/g, '')
-
-        const binaryDer = base64ToArrayBuffer(pemContents)
-
-        const publicKey = await window.crypto.subtle.importKey(
-            'spki',
-            binaryDer,
-            RSA_CONFIG,
-            true,
-            ['encrypt']
-        )
-
-        return publicKey
-    } catch (error) {
-        console.error('Failed to import public key:', error)
-        throw new Error('Invalid public key format')
-    }
-}
-
-export async function importPrivateKey(pemPrivateKey: string): Promise<CryptoKey> {
-    try {
-        const pemContents = pemPrivateKey
-            .replace('-----BEGIN PRIVATE KEY-----', '')
-            .replace('-----END PRIVATE KEY-----', '')
-            .replace(/\s/g, '')
-
-        const binaryDer = base64ToArrayBuffer(pemContents)
-
-        const privateKey = await window.crypto.subtle.importKey(
-            'pkcs8',
-            binaryDer,
-            RSA_CONFIG,
-            true,
-            ['decrypt']
-        )
-
-        return privateKey
-    } catch (error) {
-        console.error('Failed to import private key:', error)
-        throw new Error('Invalid private key format')
-    }
-}
-
+/**
+ * Encrypt message menggunakan X25519 key exchange + NaCl secretbox (XSalsa20-Poly1305)
+ * 
+ * @param message - Plaintext message
+ * @param recipientPublicKey - Public key penerima (base64 string)
+ * @returns EncryptedPayload berisi ephemeral public key, nonce, dan ciphertext
+ */
 export async function encryptMessage(
     message: string,
-    recipientPublicKey: CryptoKey | string
+    recipientPublicKey: string
 ): Promise<EncryptedPayload> {
     try {
-        const publicKey = typeof recipientPublicKey === 'string'
-            ? await importPublicKey(recipientPublicKey)
-            : recipientPublicKey
+        // Decode recipient's public key
+        const recipientPubKeyBytes = decodeBase64(recipientPublicKey)
 
-        const aesKey = await window.crypto.subtle.generateKey(
-            AES_CONFIG,
-            true,
-            ['encrypt', 'decrypt']
+        // Generate ephemeral key pair untuk one-time key exchange
+        const ephemeralKeyPair = nacl.box.keyPair()
+
+        // Generate random nonce (24 bytes for nacl.box)
+        const nonce = nacl.randomBytes(nacl.box.nonceLength)
+
+        // Encode message to bytes
+        const messageBytes = decodeUTF8(message)
+
+        // Encrypt menggunakan nacl.box (X25519 + XSalsa20-Poly1305)
+        // nacl.box melakukan:
+        // 1. X25519 key exchange: ephemeralSecret × recipientPublic = sharedKey
+        // 2. Encrypt dengan XSalsa20-Poly1305 (authenticated encryption)
+        const ciphertext = nacl.box(
+            messageBytes,
+            nonce,
+            recipientPubKeyBytes,
+            ephemeralKeyPair.secretKey
         )
 
-        const iv = window.crypto.getRandomValues(new Uint8Array(12))
-
-        const encoder = new TextEncoder()
-        const messageBuffer = encoder.encode(message)
-
-        const encryptedMessage = await window.crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv: iv },
-            aesKey,
-            messageBuffer
-        )
-
-        const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey)
-
-        const encryptedKey = await window.crypto.subtle.encrypt(
-            { name: 'RSA-OAEP' },
-            publicKey,
-            rawAesKey
-        )
+        if (!ciphertext) {
+            throw new Error('Encryption failed - null ciphertext')
+        }
 
         return {
-            encryptedKey: arrayBufferToBase64(encryptedKey),
-            encryptedMessage: arrayBufferToBase64(encryptedMessage),
-            iv: arrayBufferToBase64(iv),
+            ephemeralPublicKey: encodeBase64(ephemeralKeyPair.publicKey),
+            nonce: encodeBase64(nonce),
+            ciphertext: encodeBase64(ciphertext),
             version: ENCRYPTION_VERSION
         }
 
@@ -162,46 +117,46 @@ export async function encryptMessage(
     }
 }
 
+/**
+ * Decrypt message menggunakan X25519 key exchange + NaCl secretbox
+ * 
+ * @param payload - EncryptedPayload dari encryptMessage
+ * @param privateKey - Private key penerima (base64 string)
+ * @returns Decrypted plaintext message
+ */
 export async function decryptMessage(
     payload: EncryptedPayload,
-    privateKey: CryptoKey | string
+    privateKey: string
 ): Promise<string> {
     try {
+        // Version check
         if (payload.version !== ENCRYPTION_VERSION) {
-            console.warn('Different encryption version:', payload.version)
+            console.warn(`Different encryption version: ${payload.version}, current: ${ENCRYPTION_VERSION}`)
         }
 
-        const privKey = typeof privateKey === 'string'
-            ? await importPrivateKey(privateKey)
-            : privateKey
+        // Decode all base64 values
+        const ephemeralPubKey = decodeBase64(payload.ephemeralPublicKey)
+        const nonce = decodeBase64(payload.nonce)
+        const ciphertext = decodeBase64(payload.ciphertext)
+        const privateKeyBytes = decodeBase64(privateKey)
 
-        const encryptedKeyBuffer = base64ToArrayBuffer(payload.encryptedKey)
-
-        const rawAesKey = await window.crypto.subtle.decrypt(
-            { name: 'RSA-OAEP' },
-            privKey,
-            encryptedKeyBuffer
+        // Decrypt menggunakan nacl.box.open
+        // nacl.box.open melakukan:
+        // 1. X25519 key exchange: recipientSecret × ephemeralPublic = sharedKey
+        // 2. Decrypt dan verify dengan XSalsa20-Poly1305
+        const decrypted = nacl.box.open(
+            ciphertext,
+            nonce,
+            ephemeralPubKey,
+            privateKeyBytes
         )
 
-        const aesKey = await window.crypto.subtle.importKey(
-            'raw',
-            rawAesKey,
-            AES_CONFIG,
-            false,
-            ['decrypt']
-        )
+        if (!decrypted) {
+            throw new Error('Decryption failed - authentication failed or corrupted data')
+        }
 
-        const encryptedMessageBuffer = base64ToArrayBuffer(payload.encryptedMessage)
-        const iv = base64ToArrayBuffer(payload.iv)
-
-        const decryptedBuffer = await window.crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: iv },
-            aesKey,
-            encryptedMessageBuffer
-        )
-
-        const decoder = new TextDecoder()
-        return decoder.decode(decryptedBuffer)
+        // Decode bytes ke string
+        return encodeUTF8(decrypted)
 
     } catch (error) {
         console.error('Decryption failed:', error)
@@ -209,39 +164,40 @@ export async function decryptMessage(
     }
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
-    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
-    let binary = ''
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i])
-    }
-    return btoa(binary)
-}
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i)
-    }
-    return bytes.buffer
-}
-
-export async function generateAndExportKeyPair(): Promise<StorableKeyPair> {
-    const keyPair = await generateKeyPair()
-
-    const [publicKey, privateKey] = await Promise.all([
-        exportPublicKey(keyPair.publicKey),
-        exportPrivateKey(keyPair.privateKey)
-    ])
-
-    return { publicKey, privateKey }
-}
-
+/**
+ * Cek apakah browser mendukung crypto yang dibutuhkan
+ * TweetNaCl adalah pure JS, jadi selalu didukung
+ */
 export function isCryptoSupported(): boolean {
-    return !!(
-        window.crypto &&
-        window.crypto.subtle &&
-        window.crypto.getRandomValues
-    )
+    try {
+        // Test dengan generate key pair
+        const test = nacl.box.keyPair()
+        return test.publicKey.length === 32 && test.secretKey.length === 32
+    } catch {
+        return false
+    }
+}
+
+/**
+ * Validasi format public key (harus 32 bytes dalam base64)
+ */
+export function isValidPublicKey(publicKey: string): boolean {
+    try {
+        const decoded = decodeBase64(publicKey)
+        return decoded.length === 32
+    } catch {
+        return false
+    }
+}
+
+/**
+ * Validasi format private key (harus 32 bytes dalam base64)
+ */
+export function isValidPrivateKey(privateKey: string): boolean {
+    try {
+        const decoded = decodeBase64(privateKey)
+        return decoded.length === 32
+    } catch {
+        return false
+    }
 }

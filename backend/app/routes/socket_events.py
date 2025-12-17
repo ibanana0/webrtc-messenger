@@ -9,7 +9,6 @@ connected_user = {}
 def handle_connect():
     print(f'Client Connected: {request.sid}')
     
-    # Kirim status P2P ke client baru
     node_info = p2p_manager.get_node_info()
     emit('p2p_status', {
         'is_running': p2p_manager.node is not None,
@@ -24,7 +23,6 @@ def handle_disconnect():
     print(f'Client Disconnected: {request.sid}')
     online_users = [u['username'] for u in connected_user.values()]
     emit('online_users', {'users': online_users}, broadcast=True)
-    print(f'Client Disconnected: {request.sid}')
 
 @socketio.on('join')
 def handle_join(data):
@@ -37,7 +35,6 @@ def handle_join(data):
         online_users = [u['username'] for u in connected_user.values()]
         emit('online_users', {'users': online_users}, room='main')
         
-        # Kirim info P2P ke user yang baru join (node lebih mungkin ready)
         node_info = p2p_manager.get_node_info()
         peer_count = 0
         known_peers = []
@@ -71,14 +68,57 @@ def handle_message(data):
             'username': username,
             'message': message,
             'timestamp': timestamp,
-            'encrypted': encrypted
+            'encrypted': encrypted,
+            'isDM': False
         }, room='main')
     
     p2p_manager.send_message(
             sender=username,
             content=message,
-            timestamp=timestamp
+            timestamp=timestamp,
+            encrypted=encrypted
         )
+
+@socketio.on('send_direct_message')
+def handle_direct_message(data):
+    """Handle E2E encrypted Direct Messages"""
+    sender = data.get('username')
+    recipient = data.get('recipient')
+    message = data.get('message')
+    timestamp = data.get('timestamp')
+    encrypted = data.get('encrypted', False)
+    
+    if not sender or not recipient or not message:
+        return
+    
+    recipient_sid = None
+    for sid, user_data in connected_user.items():
+        if user_data.get('username') == recipient:
+            recipient_sid = sid
+            break
+    
+    dm_data = {
+        'username': sender,
+        'recipient': recipient,
+        'message': message,
+        'timestamp': timestamp,
+        'encrypted': encrypted,
+        'isDM': True
+    }
+    
+    if recipient_sid:
+        emit('receive_direct_message', dm_data, room=recipient_sid)
+        print(f"📩 DM delivered locally: {sender} -> {recipient}")
+    
+    emit('receive_direct_message', dm_data, room=request.sid)
+    
+    p2p_manager.send_direct_message(
+        sender=sender,
+        recipient=recipient,
+        content=message,
+        timestamp=timestamp,
+        encrypted=encrypted
+    )
 
 @socketio.on('connect_peer')
 def handle_connect_peer(data):
@@ -103,15 +143,20 @@ def handle_get_p2p_info():
     node_info = p2p_manager.get_node_info()
     peer_count = 0
     known_peers = []
+    connected_peers = []
 
+    if p2p_manager.node:
+        connected_peers = list(p2p_manager.node._connected_peers)
+        peer_count = len(connected_peers)
+    
     if p2p_manager.gossip_handler:
         known_peers = list(p2p_manager.gossip_handler.get_known_peers().values())
-        peer_count = len(known_peers)
     
     emit('p2p_info', {
         'node_info': node_info,
         'peer_count': peer_count,
-        'known_peers': known_peers
+        'known_peers': known_peers,
+        'connected_peers': connected_peers
     })
 
 def on_peer_connected(peer_id: str):

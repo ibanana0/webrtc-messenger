@@ -24,15 +24,15 @@ export function P2PStatusBadge({ isConnected, peerCount, onClick }: P2PStatusBad
 
     const getStatusText = () => {
         if (!isConnected) return 'Offline'
-        if (peerCount > 0) return `${peerCount} peer${peerCount > 1 ? 's' : ''}`
-        return 'No peers'
+        if (peerCount > 0) return `${peerCount}P`
+        return 'No P2P'
     }
 
     return (
         <button
             onClick={onClick}
             className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-full text-sm
+                flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs md:text-sm
                 border backdrop-blur-sm transition-all
                 hover:scale-105 active:scale-95
                 ${getStatusColor()}
@@ -40,8 +40,8 @@ export function P2PStatusBadge({ isConnected, peerCount, onClick }: P2PStatusBad
             title="Click to view P2P Network status"
         >
             <span>{getStatusIcon()}</span>
-            <span>{getStatusText()}</span>
-            <span className="text-xs opacity-60">🔗</span>
+            <span className="hidden sm:inline">{getStatusText()}</span>
+            <span className="text-[10px] sm:text-xs opacity-60">🔗</span>
         </button>
     )
 }

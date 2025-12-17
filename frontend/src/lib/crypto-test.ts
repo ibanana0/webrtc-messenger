@@ -1,29 +1,28 @@
 /**
- * E2E Encryption Test Utilities
+ * X25519 E2E Encryption Test Utilities
  * 
- * File ini berisi fungsi-fungsi untuk testing dan debugging E2E encryption.
+ * File ini berisi fungsi-fungsi untuk testing dan debugging E2E encryption
+ * menggunakan X25519 (Curve25519) + XSalsa20-Poly1305.
  * 
  * Cara penggunaan di Browser Console:
  * 1. Buka aplikasi di browser
  * 2. Buka Developer Tools (F12)
  * 3. Di Console, ketik:
  *    
- *    import('/src/lib/crypto-test.ts').then(m => m.runAllTests())
+ *    window.e2eTest.runAllTests()
  * 
  * Atau test individual:
- *    import('/src/lib/crypto-test.ts').then(m => m.testKeyGeneration())
+ *    window.e2eTest.testKeyGeneration()
  */
 
 import {
     generateKeyPair,
     generateAndExportKeyPair,
-    exportPublicKey,
-    exportPrivateKey,
-    importPublicKey,
-    importPrivateKey,
     encryptMessage,
     decryptMessage,
     isCryptoSupported,
+    isValidPublicKey,
+    isValidPrivateKey,
     EncryptedPayload
 } from './crypto'
 
@@ -56,49 +55,53 @@ function log(message: string, style: string = '') {
 // ============================================================================
 
 /**
- * Test 1: Cek apakah Web Crypto API tersedia
+ * Test 1: Cek apakah TweetNaCl tersedia
  */
 export async function testCryptoSupport(): Promise<boolean> {
-    log('\n🔍 TEST 1: Crypto API Support', styles.subtitle)
+    log('\n🔍 TEST 1: X25519 Crypto Support', styles.subtitle)
 
     const supported = isCryptoSupported()
 
     if (supported) {
-        log('✅ Web Crypto API is supported!', styles.success)
-        log(`   window.crypto: ${!!window.crypto}`, styles.info)
-        log(`   window.crypto.subtle: ${!!window.crypto.subtle}`, styles.info)
-        log(`   window.crypto.getRandomValues: ${!!window.crypto.getRandomValues}`, styles.info)
+        log('✅ TweetNaCl (X25519) is available!', styles.success)
+        log('   Algorithm: X25519 + XSalsa20-Poly1305', styles.info)
+        log('   Key size: 32 bytes (256 bits)', styles.info)
     } else {
-        log('❌ Web Crypto API is NOT supported!', styles.error)
-        log('   Please use a modern browser (Chrome, Firefox, Safari, Edge)', styles.info)
+        log('❌ TweetNaCl is NOT available!', styles.error)
     }
 
     return supported
 }
 
 /**
- * Test 2: Generate dan export key pair
+ * Test 2: Generate dan validasi X25519 key pair
  */
 export async function testKeyGeneration(): Promise<{ publicKey: string, privateKey: string } | null> {
-    log('\n🔑 TEST 2: Key Generation', styles.subtitle)
+    log('\n🔑 TEST 2: X25519 Key Generation', styles.subtitle)
 
     try {
-        log('Generating RSA-2048 key pair...', styles.info)
+        log('Generating X25519 key pair...', styles.info)
         const startTime = performance.now()
 
-        const keys = await generateAndExportKeyPair()
+        const keys = generateKeyPair()
 
         const endTime = performance.now()
         log(`✅ Key pair generated in ${(endTime - startTime).toFixed(2)}ms`, styles.success)
 
-        log('\n📤 Public Key (first 150 chars):', styles.info)
-        log(keys.publicKey.substring(0, 150) + '...', styles.data)
+        log('\n📤 Public Key (base64):', styles.info)
+        log(keys.publicKey, styles.data)
 
-        log('\n🔐 Private Key (first 150 chars):', styles.info)
-        log(keys.privateKey.substring(0, 150) + '...', styles.data)
+        log('\n🔐 Private Key (base64):', styles.info)
+        log(keys.privateKey, styles.data)
 
-        log(`\n   Public Key length: ${keys.publicKey.length} chars`, styles.info)
-        log(`   Private Key length: ${keys.privateKey.length} chars`, styles.info)
+        log(`\n   Public Key length: ${keys.publicKey.length} chars (44 expected)`, styles.info)
+        log(`   Private Key length: ${keys.privateKey.length} chars (44 expected)`, styles.info)
+
+        // Validasi format
+        const validPub = isValidPublicKey(keys.publicKey)
+        const validPriv = isValidPrivateKey(keys.privateKey)
+        log(`   Valid public key format: ${validPub ? '✅' : '❌'}`, validPub ? styles.success : styles.error)
+        log(`   Valid private key format: ${validPriv ? '✅' : '❌'}`, validPriv ? styles.success : styles.error)
 
         return keys
     } catch (error) {
@@ -112,15 +115,15 @@ export async function testKeyGeneration(): Promise<{ publicKey: string, privateK
  * Test 3: Encrypt dan decrypt message
  */
 export async function testEncryption(customMessage?: string): Promise<boolean> {
-    log('\n🔒 TEST 3: Encryption & Decryption', styles.subtitle)
+    log('\n🔒 TEST 3: X25519 Encryption & Decryption', styles.subtitle)
 
     try {
         // Generate keys
-        log('Step 1: Generating key pair...', styles.info)
-        const keys = await generateAndExportKeyPair()
+        log('Step 1: Generating X25519 key pair...', styles.info)
+        const keys = generateKeyPair()
 
         // Original message
-        const originalMessage = customMessage || "Hello! This is a test message for E2E encryption. 🔐🎉"
+        const originalMessage = customMessage || "Hello! This is a test message for X25519 E2E encryption. 🔐🎉"
         log(`\nStep 2: Original message:`, styles.info)
         log(`"${originalMessage}"`, styles.data)
 
@@ -134,9 +137,9 @@ export async function testEncryption(customMessage?: string): Promise<boolean> {
         log('\nEncrypted payload:', styles.info)
         console.log(encrypted)
 
-        log(`   encryptedKey length: ${encrypted.encryptedKey.length} chars`, styles.info)
-        log(`   encryptedMessage length: ${encrypted.encryptedMessage.length} chars`, styles.info)
-        log(`   iv length: ${encrypted.iv.length} chars`, styles.info)
+        log(`   ephemeralPublicKey length: ${encrypted.ephemeralPublicKey.length} chars`, styles.info)
+        log(`   nonce length: ${encrypted.nonce.length} chars`, styles.info)
+        log(`   ciphertext length: ${encrypted.ciphertext.length} chars`, styles.info)
         log(`   version: ${encrypted.version}`, styles.info)
 
         // Decrypt
@@ -171,17 +174,17 @@ export async function testEncryption(customMessage?: string): Promise<boolean> {
  * Test 4: Cross-user encryption simulation
  */
 export async function testCrossUserEncryption(): Promise<boolean> {
-    log('\n👥 TEST 4: Cross-User Encryption Simulation', styles.subtitle)
+    log('\n👥 TEST 4: Cross-User X25519 Encryption', styles.subtitle)
 
     try {
         // Alice generates her keys
-        log('Step 1: Alice generates her key pair...', styles.info)
-        const aliceKeys = await generateAndExportKeyPair()
+        log('Step 1: Alice generates her X25519 key pair...', styles.info)
+        const aliceKeys = generateKeyPair()
         log('   Alice keys generated ✅', styles.success)
 
         // Bob generates his keys
-        log('\nStep 2: Bob generates his key pair...', styles.info)
-        const bobKeys = await generateAndExportKeyPair()
+        log('\nStep 2: Bob generates his X25519 key pair...', styles.info)
+        const bobKeys = generateKeyPair()
         log('   Bob keys generated ✅', styles.success)
 
         // Alice sends message to Bob (encrypts with Bob's public key)
@@ -240,9 +243,9 @@ export async function testWrongKeyDecryption(): Promise<boolean> {
 
     try {
         // Generate two different key pairs
-        log('Step 1: Generating two different key pairs...', styles.info)
-        const correctKeys = await generateAndExportKeyPair()
-        const wrongKeys = await generateAndExportKeyPair()
+        log('Step 1: Generating two different X25519 key pairs...', styles.info)
+        const correctKeys = generateKeyPair()
+        const wrongKeys = generateKeyPair()
 
         // Encrypt with correct public key
         const message = "This should only be readable with the correct private key"
@@ -305,8 +308,8 @@ export async function testKeyStorage(): Promise<boolean> {
         }
 
         // Generate and save new keys
-        log('\nStep 2: Generating and saving new key pair...', styles.info)
-        const keys = await generateAndExportKeyPair()
+        log('\nStep 2: Generating and saving new X25519 key pair...', styles.info)
+        const keys = generateKeyPair()
         await saveKeyPair(keys.publicKey, keys.privateKey)
         log('   Keys saved to IndexedDB ✅', styles.success)
 
@@ -358,22 +361,23 @@ export async function testKeyStorage(): Promise<boolean> {
  * Run all tests
  */
 export async function runAllTests(): Promise<void> {
-    log('🧪 E2E ENCRYPTION TEST SUITE', styles.title)
+    log('🧪 X25519 E2E ENCRYPTION TEST SUITE', styles.title)
     log('='.repeat(50), styles.info)
+    log('Algorithm: X25519 + XSalsa20-Poly1305 (NaCl Box)', styles.info)
     log('Running all encryption tests...', styles.info)
 
     const results: { name: string, passed: boolean }[] = []
 
     // Test 1: Crypto Support
     results.push({
-        name: 'Crypto API Support',
+        name: 'X25519 Crypto Support',
         passed: await testCryptoSupport()
     })
 
     // Test 2: Key Generation
     const keys = await testKeyGeneration()
     results.push({
-        name: 'Key Generation',
+        name: 'X25519 Key Generation',
         passed: keys !== null
     })
 
@@ -424,12 +428,130 @@ export async function runAllTests(): Promise<void> {
     log('='.repeat(50), styles.info)
 }
 
-// Export individual test for debugging
-export {
-    generateAndExportKeyPair,
-    encryptMessage,
-    decryptMessage,
-    saveKeyPair,
-    getKeyPair,
-    clearKeys
+// ============================================================================
+// QUICK UTILITY FUNCTIONS (untuk testing di Console)
+// ============================================================================
+
+/**
+ * Dekripsi pesan dari WebSocket dengan mudah
+ */
+export async function decryptWebSocketMessage(encryptedPayloadString: string): Promise<string> {
+    log('\n🔓 DECRYPT WEBSOCKET MESSAGE', styles.subtitle)
+
+    try {
+        // Parse payload
+        const payload: EncryptedPayload = JSON.parse(encryptedPayloadString)
+        log('Parsed X25519 payload:', styles.info)
+        console.log(payload)
+
+        // Get private key from IndexedDB
+        log('\nRetrieving X25519 private key from IndexedDB...', styles.info)
+        const keyPair = await getKeyPair()
+
+        if (!keyPair) {
+            log('❌ No private key found in IndexedDB!', styles.error)
+            log('   Anda perlu login terlebih dahulu agar key tersedia.', styles.info)
+            throw new Error('No private key found')
+        }
+
+        log('✅ Private key found', styles.success)
+
+        // Decrypt
+        log('\nDecrypting message...', styles.info)
+        const decrypted = await decryptMessage(payload, keyPair.privateKey)
+
+        log('✅ Decryption successful!', styles.success)
+        log('\n📩 Decrypted message:', styles.info)
+        log(`"${decrypted}"`, styles.data)
+
+        return decrypted
+
+    } catch (error) {
+        log(`❌ Decryption failed: ${error}`, styles.error)
+        throw error
+    }
+}
+
+/**
+ * Enkripsi pesan untuk testing
+ */
+export async function encryptTestMessage(message: string): Promise<EncryptedPayload> {
+    log('\n🔒 ENCRYPT TEST MESSAGE', styles.subtitle)
+
+    try {
+        // Get public key from IndexedDB
+        const keyPair = await getKeyPair()
+
+        if (!keyPair) {
+            log('⚠️ No key pair in IndexedDB, generating new X25519 pair...', styles.info)
+            const newKeys = generateKeyPair()
+            await saveKeyPair(newKeys.publicKey, newKeys.privateKey)
+
+            const encrypted = await encryptMessage(message, newKeys.publicKey)
+            log('✅ Message encrypted with new X25519 key pair', styles.success)
+            console.log(encrypted)
+            return encrypted
+        }
+
+        const encrypted = await encryptMessage(message, keyPair.publicKey)
+        log('✅ Message encrypted', styles.success)
+        log('\n📦 Encrypted payload:', styles.info)
+        console.log(encrypted)
+
+        log('\n💡 Copy JSON ini untuk testing dekripsi:', styles.info)
+        log(JSON.stringify(encrypted), styles.data)
+
+        return encrypted
+
+    } catch (error) {
+        log(`❌ Encryption failed: ${error}`, styles.error)
+        throw error
+    }
+}
+
+/**
+ * Quick check: Apakah E2E sudah setup?
+ */
+export async function checkE2EStatus(): Promise<void> {
+    log('\n🔍 X25519 E2E STATUS CHECK', styles.subtitle)
+
+    const hasKeys = await hasKeyPair()
+
+    if (hasKeys) {
+        log('✅ X25519 E2E Encryption is READY', styles.success)
+        const keys = await getKeyPair()
+        if (keys) {
+            log(`   Public key (base64): ${keys.publicKey}`, styles.info)
+            log(`   Valid format: ${isValidPublicKey(keys.publicKey) ? '✅' : '❌'}`, styles.info)
+        }
+    } else {
+        log('❌ E2E Encryption is NOT SETUP', styles.error)
+        log('   Login ke aplikasi untuk generate X25519 key pair', styles.info)
+    }
+}
+
+// Expose ke window untuk akses mudah di Console
+if (typeof window !== 'undefined') {
+    (window as any).e2eTest = {
+        runAllTests,
+        testCryptoSupport,
+        testKeyGeneration,
+        testEncryption,
+        testCrossUserEncryption,
+        testWrongKeyDecryption,
+        testKeyStorage,
+        decryptWebSocketMessage,
+        encryptTestMessage,
+        checkE2EStatus,
+        // Re-export primitives
+        generateKeyPair,
+        encryptMessage,
+        decryptMessage,
+        getKeyPair,
+        clearKeys
+    }
+
+    console.log('%c🔐 X25519 E2E Test Utilities Loaded!', 'color: #4CAF50; font-weight: bold;')
+    console.log('%cAlgorithm: X25519 + XSalsa20-Poly1305', 'color: #2196F3;')
+    console.log('%cUse window.e2eTest.runAllTests() or other functions', 'color: #9E9E9E;')
 }

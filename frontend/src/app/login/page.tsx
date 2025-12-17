@@ -12,6 +12,7 @@ import Link from 'next/link'
 import DecryptedText from '../../components/ui/react-bits/DecryptedText';
 import LiquidEther from "@/components/ui/react-bits/LiquidEther"
 import { PageTransition } from "@/components/ui/page-transition"
+import { setupE2EEncryption } from '@/lib/e2eSetup'
 
 export default function LoginPage() {
     const router = useRouter()
@@ -21,10 +22,12 @@ export default function LoginPage() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [e2eStatus, setE2eStatus] = useState('')
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
+        setE2eStatus('')
         setLoading(true)
 
         const { data, error: apiError } = await authApi.login(
@@ -39,7 +42,24 @@ export default function LoginPage() {
         }
 
         if (data) {
+            // Login berhasil, simpan ke store
             login(data.user, data.token)
+
+            // Setup E2E encryption (generate/load keys)
+            setE2eStatus('Setting up encryption...')
+            const e2eResult = await setupE2EEncryption()
+
+            if (e2eResult.success) {
+                if (e2eResult.isNewSetup) {
+                    console.log('🔐 New E2E keys generated')
+                } else {
+                    console.log('🔐 Using existing E2E keys')
+                }
+            } else {
+                console.warn('⚠️ E2E setup failed:', e2eResult.error)
+                // Tetap lanjut ke chat, E2E opsional
+            }
+
             router.push('/chat')
         }
 
@@ -85,9 +105,10 @@ export default function LoginPage() {
                                     required
                                 />
                                 {error && <p className="text-red-500 text-sm">{error}</p>}
+                                {e2eStatus && <p className="text-blue-300 text-sm text-center">🔐 {e2eStatus}</p>}
 
                                 <Button type="submit" className="w-full cursor-pointer" disabled={loading} variant={'ghost'}>
-                                    {loading ? 'Loading...' : 'Sign In'}
+                                    {loading ? (e2eStatus || 'Signing in...') : 'Sign In'}
                                 </Button>
                             </form>
                             <p className="text-center mt-2 text-sm">

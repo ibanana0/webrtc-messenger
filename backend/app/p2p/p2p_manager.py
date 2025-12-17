@@ -52,7 +52,6 @@ class P2PManager:
         self._trio_token = trio.lowlevel.current_trio_token()
         self._send_channel, self._receive_channel = trio.open_memory_channel(100)
         
-        # Register peer callbacks to notify frontend
         self.node.set_peer_callbacks(
             on_connect=on_peer_connected,
             on_disconnect=on_peer_disconnected
@@ -72,7 +71,21 @@ class P2PManager:
                 await self.gossip_handler.send_chat_message(
                     command['sender'],
                     command['content'],
-                    command.get('timestamp')
+                    command.get('timestamp'),
+                    command.get('encrypted', False)
+                )
+            elif cmd_type == 'send_dm':
+                await self.gossip_handler.send_direct_message(
+                    command['sender'],
+                    command['recipient'],
+                    command['content'],
+                    command.get('timestamp'),
+                    command.get('encrypted', False)
+                )
+            elif cmd_type == 'broadcast_key':
+                await self.gossip_handler.broadcast_key_announce(
+                    command['username'],
+                    command['public_key']
                 )
     
     def connect_to_peer(self, peer_address: str):
@@ -83,7 +96,7 @@ class P2PManager:
                 trio_token=self._trio_token
             )
     
-    def send_message(self, sender: str, content: str, timestamp: str = None):
+    def send_message(self, sender: str, content: str, timestamp: str = None, encrypted: bool = False):
         if self._trio_token and self._send_channel:
             trio.from_thread.run_sync(
                 self._send_channel.send_nowait,
@@ -91,10 +104,49 @@ class P2PManager:
                     'type': 'send',
                     'sender': sender,
                     'content': content,
-                    'timestamp': timestamp
+                    'timestamp': timestamp,
+                    'encrypted': encrypted
                 },
                 trio_token=self._trio_token
             )
+    
+    def send_direct_message(self, sender: str, recipient: str, content: str, timestamp: str = None, encrypted: bool = False):
+        """Send a Direct Message via P2P to reach recipient on other nodes"""
+        if self._trio_token and self._send_channel:
+            trio.from_thread.run_sync(
+                self._send_channel.send_nowait,
+                {
+                    'type': 'send_dm',
+                    'sender': sender,
+                    'recipient': recipient,
+                    'content': content,
+                    'timestamp': timestamp,
+                    'encrypted': encrypted
+                },
+                trio_token=self._trio_token
+            )
+    
+    def broadcast_public_key(self, username: str, public_key: str):
+        """
+        Broadcast a user's public key to all connected P2P peers.
+        Called when a user uploads/updates their public key.
+        """
+        if self._trio_token and self._send_channel:
+            try:
+                trio.from_thread.run_sync(
+                    self._send_channel.send_nowait,
+                    {
+                        'type': 'broadcast_key',
+                        'username': username,
+                        'public_key': public_key
+                    },
+                    trio_token=self._trio_token
+                )
+                logger.info(f"🔑 Queued key broadcast for: {username}")
+            except Exception as e:
+                logger.error(f"Failed to queue key broadcast: {e}")
+        else:
+            logger.warning("P2P not ready, cannot broadcast key")
     
     def get_node_info(self) -> dict:
         if self.node:

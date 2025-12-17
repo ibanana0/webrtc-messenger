@@ -2,16 +2,14 @@ from .. import db
 from ..models.base import BaseModel
 import bcrypt
 
-# meng-inherit dari class BaseModel
 class User(BaseModel):
     __tablename__ = "users"
     
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(128), nullable=False)
-    public_key = db.Column(db.Text, nullable=True)  # untuk e2e encryption
+    public_key = db.Column(db.Text, nullable=True)
     
-    # Fungsi helper
     def set_password(self, password: str) -> None:
         salt = bcrypt.gensalt()
         self.password_hash = bcrypt.hashpw(

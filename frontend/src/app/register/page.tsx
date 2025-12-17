@@ -12,6 +12,7 @@ import Link from 'next/link'
 import DecryptedText from '../../components/ui/react-bits/DecryptedText';
 import LiquidEther from "@/components/ui/react-bits/LiquidEther"
 import { PageTransition } from "@/components/ui/page-transition"
+import { setupE2EEncryption } from '@/lib/e2eSetup'
 
 export default function RegisterPage() {
     const router = useRouter()
@@ -22,12 +23,16 @@ export default function RegisterPage() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [status, setStatus] = useState('')
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
+        setStatus('')
         setLoading(true)
 
+        // 1. Register user
+        setStatus('Creating account...')
         const { data, error: apiError } = await authApi.register(
             username,
             email,
@@ -37,11 +42,26 @@ export default function RegisterPage() {
         if (apiError) {
             setError(apiError)
             setLoading(false)
+            setStatus('')
             return
         }
 
         if (data) {
-            router.push('/login')
+            // 2. Auto-login setelah register berhasil
+            login(data.user, data.token)
+
+            // 3. Setup E2E encryption (generate keys)
+            setStatus('Setting up encryption...')
+            const e2eResult = await setupE2EEncryption()
+
+            if (e2eResult.success) {
+                console.log('🔐 E2E keys generated for new user')
+            } else {
+                console.warn('⚠️ E2E setup failed:', e2eResult.error)
+            }
+
+            // 4. Redirect ke chat
+            router.push('/chat')
         }
 
         setLoading(false)
@@ -94,9 +114,10 @@ export default function RegisterPage() {
                                     required
                                 />
                                 {error && <p className="text-red-500 text-sm">{error}</p>}
+                                {status && <p className="text-blue-300 text-sm text-center">🔐 {status}</p>}
 
                                 <Button type="submit" className="w-full cursor-pointer" disabled={loading} variant={'ghost'}>
-                                    {loading ? 'Loading...' : 'Sign Up'}
+                                    {loading ? (status || 'Creating account...') : 'Sign Up'}
                                 </Button>
                             </form>
                             <p className="text-center mt-2 text-sm">

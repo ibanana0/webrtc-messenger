@@ -19,6 +19,9 @@ import { keysApi } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/glass/card'
 import { Button } from '@/components/ui/glass/button'
 
+// Import to enable window.e2eTest console utilities
+import '@/lib/crypto-test'
+
 interface TestResult {
     name: string
     status: 'pending' | 'running' | 'passed' | 'failed'
@@ -107,7 +110,7 @@ export default function E2ETestPage() {
             const keys = await generateAndExportKeyPair()
             updateTestResult(1, {
                 status: keys ? 'passed' : 'failed',
-                message: keys ? `Generated RSA-2048 key pair` : 'Failed to generate keys',
+                message: keys ? `Generated X25519 key pair (32 bytes)` : 'Failed to generate keys',
                 duration: performance.now() - startT2
             })
 
@@ -121,11 +124,11 @@ export default function E2ETestPage() {
             const startT3 = performance.now()
             const testMsg = 'Test encryption message 🔐'
             const encrypted = await encryptMessage(testMsg, keys.publicKey)
-            const encryptSuccess = encrypted && encrypted.encryptedMessage && encrypted.iv
+            const encryptSuccess = encrypted && encrypted.ciphertext && encrypted.nonce && encrypted.ephemeralPublicKey
             updateTestResult(2, {
                 status: encryptSuccess ? 'passed' : 'failed',
                 message: encryptSuccess
-                    ? `Payload: ${encrypted.encryptedMessage.length} chars`
+                    ? `Ciphertext: ${encrypted.ciphertext.length} chars (X25519 + XSalsa20-Poly1305)`
                     : 'Encryption failed',
                 duration: performance.now() - startT3
             })
@@ -295,9 +298,9 @@ export default function E2ETestPage() {
                                     <div
                                         key={idx}
                                         className={`p-3 rounded-lg border ${result.status === 'passed' ? 'border-green-500/30 bg-green-900/20' :
-                                                result.status === 'failed' ? 'border-red-500/30 bg-red-900/20' :
-                                                    result.status === 'running' ? 'border-blue-500/30 bg-blue-900/20' :
-                                                        'border-gray-500/30 bg-gray-900/20'
+                                            result.status === 'failed' ? 'border-red-500/30 bg-red-900/20' :
+                                                result.status === 'running' ? 'border-blue-500/30 bg-blue-900/20' :
+                                                    'border-gray-500/30 bg-gray-900/20'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">

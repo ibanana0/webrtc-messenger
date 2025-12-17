@@ -1,4 +1,3 @@
-// Dynamic API URL - can be overridden via localStorage for multi-node testing
 function getApiUrl(): string {
     if (typeof window !== 'undefined') {
         const customUrl = localStorage.getItem('backendUrl')
@@ -9,7 +8,6 @@ function getApiUrl(): string {
 
 /**
  * Get auth token from Zustand persist storage.
- * Zustand stores state in localStorage under 'auth-storage' key as JSON.
  */
 function getAuthToken(): string | null {
     if (typeof window === 'undefined') return null
@@ -211,6 +209,25 @@ export const keysApi = {
 
         if (!res.ok) {
             return { data: undefined, error: data.error || 'Failed to fetch public keys' }
+        }
+
+        return { data, error: undefined }
+    },
+
+    resyncKey: async (): Promise<ApiResponse<{ message: string, username: string }>> => {
+        const token = getAuthToken()
+
+        const res = await fetch(`${getApiUrl()}/api/keys/me/resync`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+            return { data: undefined, error: data.error || 'Failed to resync key' }
         }
 
         return { data, error: undefined }
