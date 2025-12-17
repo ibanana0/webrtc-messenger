@@ -73,9 +73,9 @@ def login():
     token = generate_token(user_id=user.id, username=user.username)
     
     return jsonify({
-        'message' : 'Login successful',
-        'user' : user.to_dict(include_public_key=True),
-        'token' : token
+        'message': 'Login successful',
+        'user': user.to_dict(include_public_key=True),
+        'token': token
     }), 200
     
 @auth_bp.route('/me', methods=['GET'])

@@ -26,8 +26,10 @@ def create_app(config_name=None):
     
     from app.routes.auth import auth_bp
     from app.routes.p2p_routes import p2p_bp
+    from app.routes.keys import keys_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(keys_bp)
     app.register_blueprint(p2p_bp, url_prefix='/api/p2p')
     from app.routes import socket_events
     

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { encryptMessage, decryptMessage, EncryptedPayload } from './crypto'
+import { getPrivateKey, getCachedRecipientKey, cacheRecipientKey } from './keyStore'
+import { keysApi } from './api'
 
 interface Message {
     username: string,
@@ -55,6 +58,58 @@ export function useWebsocket(username: string) {
     const [p2pEvents, setP2pEvents] = useState<P2PEvent[]>([])
     const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryItem[]>([])
 
+    const [e2eEnabled, setE2eEnabled] = useState(false)
+    const privateKeyRef = useRef<string | null>(null)
+
+    const sendEncryptedMessage = async (recipientUsername: string, message: string) => {
+        if (!socketRef.current) return
+        
+        try {
+            let recipientPublicKey = getCachedRecipientKey(recipientUsername)
+            
+            if (!recipientPublicKey) {
+                const { data, error } = await keysApi.getPublicKey(recipientUsername)
+                
+                if (error || !data?.public_key) {
+                    console.error('Recipient has no public key, sending unencrypted')
+                    sendMessage(message)
+                    return
+                }
+                
+                recipientPublicKey = data.public_key
+                cacheRecipientKey(recipientUsername, recipientPublicKey)
+            }
+            
+            const encryptedPayload = await encryptMessage(message, recipientPublicKey)
+            
+            socketRef.current.emit('send_message', {
+                message: JSON.stringify(encryptedPayload), 
+                encrypted: true,
+                recipient: recipientUsername
+            })
+            
+            console.log('Encrypted message sent to:', recipientUsername)
+            
+        } catch (error) {
+            console.error('Failed to send encrypted message:', error)
+        }
+    }
+
+    useEffect(() => {
+        const loadPrivateKey = async () => {
+            const privateKey = await getPrivateKey()
+            if (privateKey) {
+                privateKeyRef.current = privateKey
+                setE2eEnabled(true)
+                console.log('E2E encryption enabled')
+            } else {
+                console.log('E2E encryption not available (no private key)')
+            }
+        }
+        
+        loadPrivateKey()
+    }, [])
+
     useEffect(() => {
         // Dynamic backend URL - can be overridden via localStorage
         const getSocketUrl = () => {
@@ -93,8 +148,34 @@ export function useWebsocket(username: string) {
             console.error('Connection error:', error)
         })
 
-        socketRef.current.on('receive_message', (data: Message) => {
-            setMessages(prev => [...prev, data])
+        socketRef.current.on('receive_message', async (data) => {
+            try {
+                if (data.encrypted && privateKeyRef.current) {
+                    const encryptedPayload: EncryptedPayload = JSON.parse(data.message)
+                    
+                    const decryptedMessage = await decryptMessage(
+                        encryptedPayload, 
+                        privateKeyRef.current
+                    )
+                    
+                    setMessages(prev => [...prev, {
+                        ...data,
+                        message: decryptedMessage,
+                        wasEncrypted: true 
+                    }])
+                    
+                } else {
+                    setMessages(prev => [...prev, data])
+                }
+                
+            } catch (error) {
+                console.error('Failed to decrypt message:', error)
+                setMessages(prev => [...prev, {
+                    ...data,
+                    message: '[Encrypted message - unable to decrypt]',
+                    decryptFailed: true
+                }])
+            }
         })
 
         socketRef.current.on('online_users', (data: { users: string[] }) => {
@@ -221,5 +302,8 @@ export function useWebsocket(username: string) {
         connectionHistory,
         clearP2PEvents,
         clearConnectionHistory,
+
+        e2eEnabled,
+        sendEncryptedMessage,
     }
 }

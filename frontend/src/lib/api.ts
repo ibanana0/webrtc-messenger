@@ -7,6 +7,25 @@ function getApiUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 }
 
+/**
+ * Get auth token from Zustand persist storage.
+ * Zustand stores state in localStorage under 'auth-storage' key as JSON.
+ */
+function getAuthToken(): string | null {
+    if (typeof window === 'undefined') return null
+
+    try {
+        const authStorage = localStorage.getItem('auth-storage')
+        if (!authStorage) return null
+
+        const parsed = JSON.parse(authStorage)
+        return parsed?.state?.token || null
+    } catch (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+    }
+}
+
 interface ApiResponse<T> {
     data?: T
     error?: string
@@ -134,4 +153,66 @@ export const p2pApi = {
                 }),
             }
         ),
+}
+
+export const keysApi = {
+    getPublicKey: async (username: string): Promise<ApiResponse<{ username: string, public_key: string }>> => {
+        const token = getAuthToken()
+
+        const res = await fetch(`${getApiUrl()}/api/keys/user/${username}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+            return { data: undefined, error: data.error || 'Failed to fetch public key' }
+        }
+
+        return { data, error: undefined }
+    },
+
+    updatePublicKey: async (publicKey: string): Promise<ApiResponse<{ message: string }>> => {
+        const token = getAuthToken()
+
+        const res = await fetch(`${getApiUrl()}/api/keys/me`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ public_key: publicKey })
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+            return { data: undefined, error: data.error || 'Failed to update public key' }
+        }
+
+        return { data, error: undefined }
+    },
+
+    getMultiplePublicKeys: async (usernames: string[]): Promise<ApiResponse<{ keys: Record<string, string | null> }>> => {
+        const token = getAuthToken()
+
+        const res = await fetch(`${getApiUrl()}/api/keys/users`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ usernames })
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+            return { data: undefined, error: data.error || 'Failed to fetch public keys' }
+        }
+
+        return { data, error: undefined }
+    }
 }
