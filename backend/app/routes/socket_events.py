@@ -64,12 +64,14 @@ def handle_message(data):
     username = data.get('username')
     message = data.get('message')
     timestamp = data.get('timestamp')
+    encrypted = data.get('encrypted', False)
     
     if username and message:
         emit('receive_message', {
             'username': username,
             'message': message,
-            'timestamp': data.get('timestamp')
+            'timestamp': timestamp,
+            'encrypted': encrypted
         }, room='main')
     
     p2p_manager.send_message(

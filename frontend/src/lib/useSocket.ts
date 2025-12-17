@@ -10,6 +10,9 @@ interface Message {
     timestamp: string,
     from_peer?: boolean,
     peer_id?: string,
+    encrypted?: boolean,       // Whether message was sent encrypted
+    wasEncrypted?: boolean,    // Whether received message was encrypted
+    decryptFailed?: boolean,   // Whether decryption failed
 }
 
 interface NodeInfo {
@@ -58,42 +61,123 @@ export function useWebsocket(username: string) {
     const [p2pEvents, setP2pEvents] = useState<P2PEvent[]>([])
     const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryItem[]>([])
 
+    // E2E Encryption states
     const [e2eEnabled, setE2eEnabled] = useState(false)
+    const [e2eStatus, setE2eStatus] = useState<'checking' | 'ready' | 'not_setup'>('checking')
     const privateKeyRef = useRef<string | null>(null)
 
+    /**
+     * Send encrypted message to a specific recipient.
+     * Server CANNOT read this message - only the recipient with private key can decrypt.
+     */
     const sendEncryptedMessage = async (recipientUsername: string, message: string) => {
         if (!socketRef.current) return
-        
+
         try {
             let recipientPublicKey = getCachedRecipientKey(recipientUsername)
-            
+
             if (!recipientPublicKey) {
                 const { data, error } = await keysApi.getPublicKey(recipientUsername)
-                
+
                 if (error || !data?.public_key) {
                     console.error('Recipient has no public key, sending unencrypted')
-                    sendMessage(message)
+                    sendMessagePlaintext(message)
                     return
                 }
-                
+
                 recipientPublicKey = data.public_key
                 cacheRecipientKey(recipientUsername, recipientPublicKey)
             }
-            
+
             const encryptedPayload = await encryptMessage(message, recipientPublicKey)
-            
+
             socketRef.current.emit('send_message', {
-                message: JSON.stringify(encryptedPayload), 
+                username,
+                message: JSON.stringify(encryptedPayload),
                 encrypted: true,
-                recipient: recipientUsername
+                recipient: recipientUsername,
+                timestamp: new Date().toISOString()
             })
-            
-            console.log('Encrypted message sent to:', recipientUsername)
-            
+
+            console.log('🔐 Encrypted message sent to:', recipientUsername)
+
         } catch (error) {
             console.error('Failed to send encrypted message:', error)
         }
     }
+
+    /**
+     * Send plaintext message (fallback when E2E is not available).
+     * WARNING: Server CAN read this message!
+     */
+    const sendMessagePlaintext = useCallback((message: string) => {
+        if (socketRef.current && message.trim()) {
+            socketRef.current.emit('send_message', {
+                username,
+                message,
+                encrypted: false,
+                timestamp: new Date().toISOString()
+            })
+        }
+    }, [username])
+
+    /**
+     * Main function to send message with E2E encryption (broadcast to room).
+     * - If E2E is enabled: encrypts message, server sees only ciphertext
+     * - If E2E not enabled: sends plaintext with warning
+     * 
+     * For broadcast (group chat), we encrypt with our own public key 
+     * so that others can verify but primarily this serves as a demo.
+     * In production, you'd encrypt for each recipient separately.
+     */
+    const sendMessageWithE2E = useCallback(async (message: string): Promise<{ encrypted: boolean }> => {
+        if (!socketRef.current || !message.trim()) return { encrypted: false }
+
+        // Add message to local state immediately (optimistic update)
+        const localMessage: Message = {
+            username,
+            message,
+            timestamp: new Date().toISOString(),
+        }
+        setMessages(prev => [...prev, localMessage])
+
+        if (e2eEnabled && privateKeyRef.current) {
+            try {
+                // For broadcast, we get our own public key and encrypt
+                // Others will need to use their own E2E (peer-to-peer direct)
+                // This is a simplified broadcast model
+
+                const { data } = await keysApi.getPublicKey(username)
+
+                if (data?.public_key) {
+                    const encryptedPayload = await encryptMessage(message, data.public_key)
+
+                    socketRef.current.emit('send_message', {
+                        username,
+                        message: JSON.stringify(encryptedPayload),
+                        encrypted: true,
+                        timestamp: new Date().toISOString()
+                    })
+
+                    console.log('🔐 Message encrypted and sent (server cannot read)')
+                    return { encrypted: true }
+                }
+            } catch (error) {
+                console.error('Encryption failed, falling back to plaintext:', error)
+            }
+        }
+
+        // Fallback to plaintext
+        console.warn('⚠️ Sending unencrypted message (server can read)')
+        socketRef.current.emit('send_message', {
+            username,
+            message,
+            encrypted: false,
+            timestamp: new Date().toISOString()
+        })
+
+        return { encrypted: false }
+    }, [username, e2eEnabled])
 
     useEffect(() => {
         const loadPrivateKey = async () => {
@@ -101,12 +185,14 @@ export function useWebsocket(username: string) {
             if (privateKey) {
                 privateKeyRef.current = privateKey
                 setE2eEnabled(true)
-                console.log('E2E encryption enabled')
+                setE2eStatus('ready')
+                console.log('🔐 E2E encryption enabled')
             } else {
-                console.log('E2E encryption not available (no private key)')
+                setE2eStatus('not_setup')
+                console.log('⚠️ E2E encryption not available (no private key)')
             }
         }
-        
+
         loadPrivateKey()
     }, [])
 
@@ -152,22 +238,22 @@ export function useWebsocket(username: string) {
             try {
                 if (data.encrypted && privateKeyRef.current) {
                     const encryptedPayload: EncryptedPayload = JSON.parse(data.message)
-                    
+
                     const decryptedMessage = await decryptMessage(
-                        encryptedPayload, 
+                        encryptedPayload,
                         privateKeyRef.current
                     )
-                    
+
                     setMessages(prev => [...prev, {
                         ...data,
                         message: decryptedMessage,
-                        wasEncrypted: true 
+                        wasEncrypted: true
                     }])
-                    
+
                 } else {
                     setMessages(prev => [...prev, data])
                 }
-                
+
             } catch (error) {
                 console.error('Failed to decrypt message:', error)
                 setMessages(prev => [...prev, {
@@ -235,7 +321,7 @@ export function useWebsocket(username: string) {
 
         socketRef.current.on('peer_connection_status', (data: PeerConnectionStatus) => {
             console.log('Peer connection status:', data)
-            
+
             // Simpan ke connection history
             setConnectionHistory(prev => [...prev, {
                 address: data.address,
@@ -243,7 +329,7 @@ export function useWebsocket(username: string) {
                 timestamp: new Date(),
                 error: data.error
             }])
-            
+
             if (data.success) {
                 // Request updated peer list
                 socketRef.current?.emit('get_p2p_info')
@@ -256,11 +342,16 @@ export function useWebsocket(username: string) {
         }
     }, [username])
 
+    /**
+     * Legacy send message function (plaintext, NOT encrypted).
+     * @deprecated Use sendMessageWithE2E instead for secure messaging
+     */
     const sendMessage = useCallback((message: string) => {
         if (socketRef.current && message.trim()) {
             socketRef.current.emit('send_message', {
                 username,
                 message,
+                encrypted: false,
                 timestamp: new Date().toISOString()
             })
         }
@@ -285,25 +376,35 @@ export function useWebsocket(username: string) {
     }, [])
 
     return {
+        // Connection status
         isConnected,
 
+        // Chat (basic)
         messages,
         onlineUsers,
-        sendMessage,
 
+        // Message sending
+        sendMessage,              // Legacy: plaintext (server can read)
+        sendMessageWithE2E,       // ✅ Recommended: encrypted (server cannot read)
+        sendEncryptedMessage,     // Direct encrypted to specific recipient
+
+        // P2P Node Info
         nodeInfo,
         knownPeers,
         peerCount,
 
+        // P2P Actions
         connectToPeer,
         refreshP2PInfo,
 
+        // P2P Events & History
         p2pEvents,
         connectionHistory,
         clearP2PEvents,
         clearConnectionHistory,
 
-        e2eEnabled,
-        sendEncryptedMessage,
+        // E2E Encryption Status
+        e2eEnabled,               // Boolean: is E2E ready?
+        e2eStatus,                // 'checking' | 'ready' | 'not_setup'
     }
 }

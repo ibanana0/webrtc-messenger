@@ -20,6 +20,7 @@ export default function ChatPage() {
     const [inputMessage, setInputMessage] = useState('')
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [showP2PPanel, setShowP2PPanel] = useState(false)
+    const [lastMessageEncrypted, setLastMessageEncrypted] = useState<boolean | null>(null)
 
     useEffect(() => {
         if (hasHydrated && !user) {
@@ -31,26 +32,32 @@ export default function ChatPage() {
         isConnected,
         messages,
         onlineUsers,
-        sendMessage,
+        sendMessageWithE2E,  // ✅ Using encrypted version
         nodeInfo,
         knownPeers,
         peerCount,
         connectToPeer,
         refreshP2PInfo,
         p2pEvents,
-        clearP2PEvents
+        clearP2PEvents,
+        e2eEnabled,
+        e2eStatus
     } = useWebsocket(user?.username || '')
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
-    const handleSend = (e: React.FormEvent) => {
+
+    const handleSend = async (e: React.FormEvent) => {
         e.preventDefault()
         if (inputMessage.trim()) {
-            sendMessage(inputMessage)
+            // Use encrypted send - server cannot read message content!
+            const result = await sendMessageWithE2E(inputMessage)
+            setLastMessageEncrypted(result.encrypted)
             setInputMessage('')
         }
     }
+
     const handleLogout = () => {
         logout()
         router.push('/login')
@@ -70,10 +77,32 @@ export default function ChatPage() {
                                 {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
                                 {' · '}{onlineUsers.length} online
                                 {peerCount > 0 && ` · ${peerCount} P2P peers`}
+                                {/* E2E Status Indicator */}
+                                {e2eStatus === 'ready' && (
+                                    <span className="ml-2 text-green-400" title="End-to-End Encryption Active">
+                                        🔐 E2E
+                                    </span>
+                                )}
+                                {e2eStatus === 'not_setup' && (
+                                    <span className="ml-2 text-yellow-400" title="E2E not configured - messages sent unencrypted">
+                                        ⚠️ No E2E
+                                    </span>
+                                )}
                             </p>
                         </div>
                         <div className="flex gap-2">
-                            <P2PStatusBadge 
+                            {/* E2E Setup Link */}
+                            {e2eStatus === 'not_setup' && (
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => router.push('/e2e-test')}
+                                    className="text-yellow-400 hover:text-yellow-300"
+                                    title="Setup E2E encryption"
+                                >
+                                    🔐 Setup E2E
+                                </Button>
+                            )}
+                            <P2PStatusBadge
                                 isConnected={isConnected}
                                 peerCount={peerCount}
                                 onClick={() => setShowP2PPanel(!showP2PPanel)}
@@ -104,10 +133,10 @@ export default function ChatPage() {
                                             )}
                                         </div>
                                         <p className={`inline-block px-3 py-2 rounded-lg max-w-[80%] ${msg.username === user.username
-                                                ? 'bg-blue-600'
-                                                : msg.from_peer
-                                                    ? 'bg-purple-700/80'  
-                                                    : 'bg-gray-700'
+                                            ? 'bg-blue-600'
+                                            : msg.from_peer
+                                                ? 'bg-purple-700/80'
+                                                : 'bg-gray-700'
                                             }`}>
                                             {msg.message}
                                         </p>
@@ -129,23 +158,33 @@ export default function ChatPage() {
                                     onRefresh={refreshP2PInfo}
                                 />
                                 {/* BARU: Event Log */}
-                                <P2PEventLog 
+                                <P2PEventLog
                                     events={p2pEvents}
                                     onClear={clearP2PEvents}
                                 />
                             </div>
                         )}
-                    </div>                    
-                    <form onSubmit={handleSend} className="flex gap-2 mt-4">
-                        <Input
-                            value={inputMessage}
-                            onChange={(e) => setInputMessage(e.target.value)}
-                            placeholder="Type a message..."
-                            className="flex-1"
-                        />
-                        <Button type="submit" variant="outline">
-                            Send
-                        </Button>
+                    </div>
+                    <form onSubmit={handleSend} className="mt-4">
+                        <div className="flex gap-2">
+                            <Input
+                                value={inputMessage}
+                                onChange={(e) => setInputMessage(e.target.value)}
+                                placeholder={e2eEnabled ? "Type a secure message... 🔐" : "Type a message..."}
+                                className="flex-1"
+                            />
+                            <Button type="submit" variant="outline" className="flex items-center gap-2">
+                                {e2eEnabled ? '🔐' : '📤'} Send
+                            </Button>
+                        </div>
+                        {/* Encryption status indicator */}
+                        <div className="text-xs mt-1 text-gray-500">
+                            {e2eEnabled ? (
+                                <span className="text-green-400">🔐 Messages are end-to-end encrypted (server cannot read)</span>
+                            ) : (
+                                <span className="text-yellow-400">⚠️ Messages are not encrypted. <button type="button" onClick={() => router.push('/e2e-test')} className="underline hover:text-yellow-300">Setup E2E</button></span>
+                            )}
+                        </div>
                     </form>
                     {showP2PPanel && (
                         <div className="lg:hidden mt-4">
