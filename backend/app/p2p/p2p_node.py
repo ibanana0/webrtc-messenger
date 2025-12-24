@@ -153,16 +153,29 @@ class P2PNode:
         """
         Get full multiaddr addresses that can be shared for peer connection.
         Filters out invalid addresses like 0.0.0.0 and prevents duplicate /p2p/.
-        Also detects real container IP for Docker environments.
+        
+        Priority:
+        1. P2P_EXTERNAL_IP environment variable (for Docker/NAT)
+        2. Detected addresses from libp2p
+        3. Fallback to socket detection
         """
         if not self.host:
             return []
         
         import socket
+        import os
         
         peer_id = self.get_peer_id()
         full_addresses = []
         
+        # Priority 1: Check for external IP override (for Docker/NAT scenarios)
+        external_ip = os.environ.get('P2P_EXTERNAL_IP')
+        if external_ip:
+            full_addresses.append(f"/ip4/{external_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
+            logger.info(f"Using external IP from P2P_EXTERNAL_IP: {external_ip}")
+            return full_addresses
+        
+        # Priority 2: Use detected addresses from libp2p
         for addr in self.host.get_addrs():
             addr_str = str(addr)
             
@@ -172,28 +185,29 @@ class P2PNode:
             if '/ip4/127.0.0.1/' in addr_str:
                 continue
             
+            # Skip Docker internal IPs (172.x.x.x, 10.x.x.x)
+            if '/ip4/172.' in addr_str or '/ip4/10.' in addr_str:
+                continue
+            
             if '/p2p/' in addr_str:
                 full_addresses.append(addr_str)
             else:
                 full_addresses.append(f"{addr_str}/p2p/{peer_id}")
         
+        # Priority 3: Fallback to socket detection if no valid addresses
         if not full_addresses and peer_id:
             try:
-                hostname = socket.gethostname()
-                real_ip = socket.gethostbyname(hostname)
-                
-                if real_ip and real_ip != '127.0.0.1':
+                # Try to detect real LAN IP
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    s.connect(('8.8.8.8', 80))
+                    real_ip = s.getsockname()[0]
                     full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
-                else:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    try:
-                        s.connect(('8.8.8.8', 80))
-                        real_ip = s.getsockname()[0]
-                        full_addresses.append(f"/ip4/{real_ip}/tcp/{self.listen_port}/p2p/{peer_id}")
-                    except Exception:
-                        full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
-                    finally:
-                        s.close()
+                    logger.info(f"Detected real IP via socket: {real_ip}")
+                except Exception:
+                    full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
+                finally:
+                    s.close()
             except Exception as e:
                 logger.warning(f"Could not detect real IP: {e}")
                 full_addresses.append(f"/ip4/127.0.0.1/tcp/{self.listen_port}/p2p/{peer_id}")
