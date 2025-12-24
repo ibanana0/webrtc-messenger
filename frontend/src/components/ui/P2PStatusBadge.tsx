@@ -41,7 +41,6 @@ export function P2PStatusBadge({ isConnected, peerCount, onClick }: P2PStatusBad
         >
             <span>{getStatusIcon()}</span>
             <span className="hidden sm:inline">{getStatusText()}</span>
-            <span className="text-[10px] sm:text-xs opacity-60">🔗</span>
         </button>
     )
 }

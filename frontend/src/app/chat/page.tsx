@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth-store'
 import { useWebsocket } from '@/lib/useSocket'
 import { Button } from '@/components/ui/glass/button'
-import { Input } from '@/components/ui/glass/input'
 import { Card } from '@/components/ui/glass/card'
 import { PageTransition } from '@/components/ui/page-transition'
 import LiquidEther from '@/components/ui/react-bits/LiquidEther'
@@ -22,6 +21,7 @@ export default function ChatPage() {
     const [manualRecipient, setManualRecipient] = useState('')
     const [showManualInput, setShowManualInput] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
     const [showP2PPanel, setShowP2PPanel] = useState(false)
 
     useEffect(() => {
@@ -49,6 +49,21 @@ export default function ChatPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
+    // Auto-resize textarea
+    const adjustTextareaHeight = () => {
+        const textarea = textareaRef.current
+        if (textarea) {
+            textarea.style.height = 'auto'
+            const lineHeight = 20 // approximate line height in px
+            const maxHeight = lineHeight * 5 // max 5 lines
+            textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
+        }
+    }
+
+    useEffect(() => {
+        adjustTextareaHeight()
+    }, [inputMessage])
+
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault()
         if (inputMessage.trim()) {
@@ -58,9 +73,13 @@ export default function ChatPage() {
                 sendMessage(inputMessage)
             }
             setInputMessage('')
-            // Don't clear recipient - keep it for subsequent messages
+            // Reset textarea height
+            if (textareaRef.current) {
+                textareaRef.current.style.height = 'auto'
+            }
         }
     }
+
 
     const handleLogout = () => {
         logout()
@@ -143,10 +162,10 @@ export default function ChatPage() {
                                                 </div>
                                                 <p className={`inline-block px-2 sm:px-3 py-1 sm:py-2 rounded-lg text-xs sm:text-sm max-w-[85%] sm:max-w-[80%] break-words ${msg.username === user.username
                                                     ? msg.isDM
-                                                        ? 'bg-green-700'
+                                                        ? 'bg-green-600'
                                                         : 'bg-blue-600'
                                                     : msg.isDM
-                                                        ? 'bg-green-800/80'
+                                                        ? 'bg-green-900/80'
                                                         : msg.from_peer
                                                             ? 'bg-purple-700/80'
                                                             : 'bg-gray-700'
@@ -211,8 +230,7 @@ export default function ChatPage() {
                                             : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
                                             }`}
                                         title="Kirim DM ke user dari node lain"
-                                    >
-                                        ✏️ <span className="hidden sm:inline">Manual</span>
+                                    ><span className="hidden sm:inline">Manual</span>
                                     </button>
                                 </div>
 
@@ -242,19 +260,28 @@ export default function ChatPage() {
                                     </div>
                                 )}
 
-                                <div className="flex gap-1.5 sm:gap-2">
-                                    <Input
+                                <div className="flex gap-1.5 sm:gap-2 items-end">
+                                    <textarea
+                                        ref={textareaRef}
                                         value={inputMessage}
                                         onChange={(e) => setInputMessage(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                handleSend(e)
+                                            }
+                                        }}
                                         placeholder={selectedRecipient ? `🔒 to ${selectedRecipient}` : "Message..."}
-                                        className="flex-1 text-xs sm:text-sm min-w-0"
+                                        rows={1}
+                                        className="flex-1 text-xs sm:text-sm min-w-0 resize-none overflow-y-auto bg-white/10 backdrop-blur-md border border-white/20 rounded-lg px-3 py-2 placeholder:text-white/40 placeholder:opacity-50 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                                        style={{ maxHeight: '100px' }}
                                     />
                                     <Button
                                         type="submit"
                                         variant="outline"
                                         className="flex items-center gap-1 sm:gap-2 flex-shrink-0 px-2 sm:px-3 text-xs sm:text-sm"
                                     >
-                                        <span className="hidden sm:inline">{selectedRecipient ? '🔒 DM' : '📤 Send'}</span>
+                                        <span className="hidden sm:inline">{selectedRecipient ? 'Send DM' : 'Send'}</span>
                                         <span className="sm:hidden">{selectedRecipient ? '🔒' : '📤'}</span>
                                     </Button>
                                 </div>

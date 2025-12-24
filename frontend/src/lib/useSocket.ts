@@ -53,22 +53,18 @@ export function useWebsocket(username: string) {
     const [messages, setMessages] = useState<Message[]>([])
     const [onlineUsers, setOnlineUsers] = useState<String[]>([])
 
-    // P2P related states
     const [nodeInfo, setNodeInfo] = useState<NodeInfo | null>(null)
     const [knownPeers, setKnownPeers] = useState<PeerInfo[]>([])
     const [peerCount, setPeerCount] = useState(0)
     const [p2pEvents, setP2pEvents] = useState<P2PEvent[]>([])
     const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryItem[]>([])
 
-    // E2E Encryption
     const privateKeyRef = useRef<string | null>(null)
     const e2eEnabledRef = useRef(false)
     const [e2eStatus, setE2eStatus] = useState<'loading' | 'enabled' | 'disabled'>('loading')
 
-    // Load private key on mount or when username changes
     useEffect(() => {
         const loadPrivateKey = async () => {
-            // Skip if username not ready yet
             if (!username) {
                 console.log('⏳ Waiting for username before loading keys...')
                 return
@@ -97,7 +93,6 @@ export function useWebsocket(username: string) {
     }, [username])
 
     useEffect(() => {
-        // Dynamic backend URL - can be overridden via localStorage
         const getSocketUrl = () => {
             const customUrl = localStorage.getItem('backendUrl')
             if (customUrl) return customUrl
@@ -119,7 +114,6 @@ export function useWebsocket(username: string) {
             setIsConnected(true)
             socketRef.current?.emit('join', { username })
 
-            // Request P2P info after a short delay (node might still be starting)
             setTimeout(() => {
                 socketRef.current?.emit('get_p2p_info')
             }, 2000)
@@ -140,7 +134,6 @@ export function useWebsocket(username: string) {
             console.log('   - hasPrivateKey:', !!privateKeyRef.current)
 
             try {
-                // Try to decrypt if message is encrypted and we have private key
                 if (data.encrypted && privateKeyRef.current) {
                     const encryptedPayload: EncryptedPayload = JSON.parse(data.message)
                     const decryptedMessage = await decryptMessage(
@@ -155,7 +148,6 @@ export function useWebsocket(username: string) {
                     setMessages(prev => [...prev, data])
                 }
             } catch (error) {
-                // If decryption fails, show encrypted message indicator
                 console.error('Failed to decrypt message:', error)
                 setMessages(prev => [...prev, {
                     ...data,
@@ -164,7 +156,6 @@ export function useWebsocket(username: string) {
             }
         })
 
-        // Handler for Direct Messages (E2E encrypted)
         socketRef.current.on('receive_direct_message', async (data) => {
             console.log('📩 Received DM:', data)
             console.log('   - from:', data.username)
@@ -182,7 +173,6 @@ export function useWebsocket(username: string) {
             console.log('   ✅ Processing message from:', data.username)
 
             try {
-                // DMs are always encrypted with our public key
                 if (data.encrypted && privateKeyRef.current) {
                     console.log('   🔐 Attempting to decrypt...')
                     console.log('   Payload preview:', data.message?.substring(0, 100))
@@ -207,7 +197,6 @@ export function useWebsocket(username: string) {
                     console.log('🔓 DM decrypted successfully!')
                 } else {
                     console.log('   📝 Adding unencrypted DM to state')
-                    // Unencrypted DM (fallback)
                     setMessages(prev => [...prev, {
                         ...data,
                         isDM: true
@@ -251,6 +240,14 @@ export function useWebsocket(username: string) {
                 timestamp: new Date().toISOString()
             }])
             socketRef.current?.emit('get_p2p_info')
+
+            if (e2eEnabledRef.current) {
+                keysApi.resyncKey().then(result => {
+                    if (result.data) {
+                        console.log('🔑 Auto-resync key to new peer:', data.peer_id)
+                    }
+                }).catch(() => { })
+            }
         })
 
         socketRef.current.on('peer_disconnected', (data: { peer_id: string }) => {
@@ -260,7 +257,6 @@ export function useWebsocket(username: string) {
                 peer_id: data.peer_id,
                 timestamp: new Date().toISOString()
             }])
-            // Auto refresh peer list
             socketRef.current?.emit('get_p2p_info')
         })
 
@@ -282,7 +278,6 @@ export function useWebsocket(username: string) {
         socketRef.current.on('peer_connection_status', (data: PeerConnectionStatus) => {
             console.log('Peer connection status:', data)
 
-            // Simpan ke connection history
             setConnectionHistory(prev => [...prev, {
                 address: data.address,
                 status: data.success ? 'success' : 'failed',
@@ -291,7 +286,6 @@ export function useWebsocket(username: string) {
             }])
 
             if (data.success) {
-                // Request updated peer list
                 socketRef.current?.emit('get_p2p_info')
             }
         })
@@ -302,13 +296,9 @@ export function useWebsocket(username: string) {
         }
     }, [username])
 
-    /**
-     * Send broadcast message - NO encryption for broadcast (everyone can read)
-     */
     const sendMessage = useCallback(async (message: string) => {
         if (!socketRef.current || !message.trim()) return
 
-        // Broadcast messages are NOT encrypted (everyone in room can read)
         socketRef.current.emit('send_message', {
             username,
             message,
@@ -319,10 +309,6 @@ export function useWebsocket(username: string) {
         console.log('📢 Broadcast message sent')
     }, [username])
 
-    /**
-     * Send Direct Message with E2E encryption
-     * Encrypts the message with recipient's public key
-     */
     const sendDirectMessage = useCallback(async (message: string, recipient: string) => {
         if (!socketRef.current || !message.trim() || !recipient) return
 
@@ -333,10 +319,8 @@ export function useWebsocket(username: string) {
         console.log('   - hasPrivateKey:', !!privateKeyRef.current)
         console.log('   - recipient:', recipient)
 
-        // For DM, we MUST encrypt with recipient's public key
         if (e2eEnabledRef.current && privateKeyRef.current) {
             try {
-                // Get RECIPIENT's public key (not our own!)
                 console.log(`   🔍 Fetching public key for ${recipient}...`)
                 const { data, error } = await keysApi.getPublicKey(recipient)
 
@@ -358,11 +342,9 @@ export function useWebsocket(username: string) {
                         timestamp
                     })
 
-                    // Add to local messages immediately (optimistic update)
-                    // We can't decrypt our own sent message because it's encrypted for recipient
                     setMessages(prev => [...prev, {
                         username,
-                        message, // Show original plaintext to sender
+                        message,
                         timestamp,
                         isDM: true,
                         recipient
@@ -382,7 +364,6 @@ export function useWebsocket(username: string) {
             console.warn('   ⚠️ E2E not enabled or no private key')
         }
 
-        // If E2E not available, send warning but still send (unencrypted DM)
         console.warn('⚠️ Falling back to UNENCRYPTED DM!')
         socketRef.current.emit('send_direct_message', {
             username,
@@ -392,7 +373,6 @@ export function useWebsocket(username: string) {
             timestamp
         })
 
-        // Add to local messages for unencrypted DM too
         setMessages(prev => [...prev, {
             username,
             message,
@@ -445,7 +425,6 @@ export function useWebsocket(username: string) {
         clearP2PEvents,
         clearConnectionHistory,
 
-        // E2E Status (for debugging)
         e2eStatus,
     }
 }
