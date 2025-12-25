@@ -23,6 +23,7 @@ export default function ChatPage() {
     const [showManualInput, setShowManualInput] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [showP2PPanel, setShowP2PPanel] = useState(false)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     useEffect(() => {
         if (hasHydrated && !user) {
@@ -242,19 +243,28 @@ export default function ChatPage() {
                                     </div>
                                 )}
 
-                                <div className="flex gap-1.5 sm:gap-2">
-                                    <Input
+                                <div className="flex gap-1.5 sm:gap-2 items-end">
+                                    <textarea
+                                        ref={textareaRef}
                                         value={inputMessage}
                                         onChange={(e) => setInputMessage(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                handleSend(e)
+                                            }
+                                        }}
                                         placeholder={selectedRecipient ? `🔒 to ${selectedRecipient}` : "Message..."}
-                                        className="flex-1 text-xs sm:text-sm min-w-0"
+                                        rows={1}
+                                        className="flex-1 text-xs sm:text-sm min-w-0 resize-none overflow-y-auto bg-white/10 backdrop-blur-md border border-white/20 rounded-lg px-3 py-2 placeholder:text-white/40 placeholder:opacity-50 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                                        style={{ maxHeight: '100px' }}
                                     />
                                     <Button
                                         type="submit"
                                         variant="outline"
                                         className="flex items-center gap-1 sm:gap-2 flex-shrink-0 px-2 sm:px-3 text-xs sm:text-sm"
                                     >
-                                        <span className="hidden sm:inline">{selectedRecipient ? '🔒 DM' : '📤 Send'}</span>
+                                        <span className="hidden sm:inline">{selectedRecipient ? 'Send DM' : 'Send'}</span>
                                         <span className="sm:hidden">{selectedRecipient ? '🔒' : '📤'}</span>
                                     </Button>
                                 </div>

@@ -71,38 +71,18 @@ export function PeerConnection({
                 {nodeInfo ? (
                     <div className="space-y-1.5 sm:space-y-2">
                         <div className="text-[10px] sm:text-xs text-gray-400">Your Peer ID:</div>
-                        <div
-                            className="bg-black/20 p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-mono break-all cursor-pointer hover:bg-black/30 transition-colors line-clamp-2"
-                            onClick={() => copyToClipboard(nodeInfo.peer_id)}
-                            title="Click to copy"
-                        >
-                            {nodeInfo.peer_id}
-                        </div>
-
-                        <button
-                            className="text-[10px] sm:text-xs text-blue-400 hover:underline"
-                            onClick={() => setShowFullAddress(!showFullAddress)}
-                        >
-                            {showFullAddress ? 'Hide' : 'Show'} Full Address
-                        </button>
-
-                        {showFullAddress && nodeInfo.full_addresses.length > 0 && (
-                            <div className="space-y-1">
-                                <div className="text-[10px] sm:text-xs text-gray-400">Full Addresses:</div>
-                                <div className="max-h-24 overflow-y-auto space-y-1">
-                                    {nodeInfo.full_addresses.map((addr, i) => (
-                                        <div
-                                            key={i}
-                                            className="bg-black/20 p-1.5 sm:p-2 rounded text-[9px] sm:text-[10px] font-mono break-all cursor-pointer hover:bg-black/30"
-                                            onClick={() => copyToClipboard(addr)}
-                                            title="Click to copy"
-                                        >
-                                            {addr}
-                                        </div>
-                                    ))}
+                        <div className="max-h-24 overflow-y-auto space-y-1">
+                            {nodeInfo.full_addresses.map((addr, i) => (
+                                <div
+                                    key={i}
+                                    className="bg-black/20 p-1.5 sm:p-2 rounded text-[9px] sm:text-[10px] font-mono break-all cursor-pointer hover:bg-black/30"
+                                    onClick={() => copyToClipboard(addr)}
+                                    title="Click to copy"
+                                >
+                                    {addr}
                                 </div>
-                            </div>
-                        )}
+                            ))}
+                        </div>
                     </div>
                 ) : (
                     <div className="text-xs sm:text-sm text-gray-400">
@@ -117,7 +97,7 @@ export function PeerConnection({
                             value={peerAddress}
                             onChange={(e) => setPeerAddress(e.target.value)}
                             placeholder="/ip4/.../p2p/..."
-                            className="text-[10px] sm:text-xs flex-1 min-w-0"
+                            className="text-[10px] sm:text-xs flex-1 min-w-0 opacity-30"
                         />
                         <Button
                             onClick={handleConnect}

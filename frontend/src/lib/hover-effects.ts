@@ -1,16 +1,5 @@
 import { cva } from "class-variance-authority"
 
-/**
- * Shared hover effect variants for all Glass UI components
- * 
- * Effects:
- * - none: No hover effect
- * - glow: Purple glow shadow that intensifies on hover
- * - shimmer: Moving shimmer effect across the component
- * - ripple: Ripple effect that scales outward on hover
- * - lift: Subtle lift effect with shadow increase
- * - scale: Scale up slightly on hover
- */
 export const hoverEffects = cva(
   "transition-all duration-300",
   {

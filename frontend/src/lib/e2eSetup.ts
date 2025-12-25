@@ -1,10 +1,3 @@
-/**
- * E2E Setup Helper
- * 
- * Fungsi untuk setup End-to-End Encryption secara otomatis.
- * Digunakan setelah login berhasil untuk memastikan user memiliki key pair.
- */
-
 import { generateKeyPair, isCryptoSupported, isValidPublicKey } from './crypto'
 import { hasKeyPair, saveKeyPair, getPublicKey } from './keyStore'
 import { keysApi } from './api'
@@ -15,10 +8,6 @@ export interface E2ESetupResult {
     error?: string
 }
 
-/**
- * Setup E2E encryption untuk user yang baru login.
- * @returns E2ESetupResult
- */
 export async function setupE2EEncryption(): Promise<E2ESetupResult> {
     try {
         if (!isCryptoSupported()) {
@@ -80,9 +69,6 @@ export async function setupE2EEncryption(): Promise<E2ESetupResult> {
     }
 }
 
-/**
- * Sync public key ke server jika belum ada.
- */
 async function syncPublicKeyToServer(publicKey: string): Promise<void> {
     try {
         const result = await keysApi.updatePublicKey(publicKey)
@@ -96,9 +82,6 @@ async function syncPublicKeyToServer(publicKey: string): Promise<void> {
     }
 }
 
-/**
- * Check E2E readiness tanpa setup.
- */
 export async function checkE2EStatus(): Promise<{
     supported: boolean
     hasKeys: boolean
